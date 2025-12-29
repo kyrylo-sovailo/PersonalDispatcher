@@ -7,23 +7,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-char resolve_all_done(const char *option)
-{
-    //Can be resolved using first letter only
-    const char *resolved_option;
-    char resolved_option_c;
-    switch (option[0])
-    {
-        case 'a': resolved_option = "all"; resolved_option_c = 'a'; break;
-        case 'd': resolved_option = "done"; resolved_option_c = 'd'; break;
-        default: return false;
-    }
-    const size_t option_length = strlen(option);
-    const size_t resolved_option_length = strlen(resolved_option);
-    if (option_length <= resolved_option_length && memcmp(option, resolved_option, option_length) == 0) return resolved_option_c;
-    else return '\0';
-}
-
 int kpd_add(int argc, char **argv)
 {
     (void)argc;
@@ -113,7 +96,7 @@ int kpd_help(int argc, char **argv)
 
 int kpd_init(int argc, char **argv)
 {
-    //Get directory
+    //Parse options
     struct CharBuffer path = { 0 };
     if (argc == 0)
     {
@@ -131,10 +114,8 @@ int kpd_init(int argc, char **argv)
     }
     else kpd_error(ERR_USAGE, "too many arguments");
 
-    //Get TODO.md path
+    //Get status of TODO.md
     string_append_file(&path);
-
-    //Get status
     struct stat status;
     const bool exists = stat(path.p, &status) >= 0;
 
@@ -156,12 +137,45 @@ int kpd_init(int argc, char **argv)
     return ERR_OK;
 }
 
+int kpd_list_or_sort(int argc, char **argv, bool sort)
+{
+    //Parse options
+    const char *options[] = { "all", "done" };
+    size_t option_index = (size_t)-1;
+    if (argc > 1)
+    {
+        kpd_error(ERR_USAGE, "too many arguments");
+    }
+    else if (argc == 1)
+    {
+        const char *option = argv[0];
+        if (!string_resolve(&option_index, option, options, sizeof(options)/sizeof(*options)))
+            kpd_error(ERR_USAGE, "'%s' is not a valid option", option);
+    }
+
+    //Parse TODO.md
+    struct EntryBuffer entries = { 0 };
+    kpd_read(&entries);
+    if (sort) entries_sort(&entries);
+
+    //Print
+    for (const struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++)
+    {
+        bool print;
+        if (option_index == 0) print = true;
+        else if (option_index == 1) print = entry->done;
+        else print = !entry->done;
+        if (print) kpd_print(entry);
+    }
+
+    //Cleanup
+    entries_finalize(&entries);
+    return ERR_OK;
+}
+
 int kpd_list(int argc, char **argv)
 {
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
+    return kpd_list_or_sort(argc, argv, false);
 }
 
 int kpd_next(int argc, char **argv)
@@ -170,10 +184,16 @@ int kpd_next(int argc, char **argv)
     if (argc > 0) kpd_error(ERR_USAGE, "too many arguments");
     struct EntryBuffer entries = { 0 };
     kpd_read(&entries);
-    const struct Entry *highest = entries_highest(&entries);
-    printf("Next priority:\n");
-    kpd_print(highest);
-    entries_finalize(&entries);
+    size_t highest_index;
+    if (!entries_highest(&highest_index, &entries))
+    {
+        printf("Nothing to do\n");
+    }
+    else
+    {
+        kpd_print(&entries.p[highest_index]);
+        entries_finalize(&entries);
+    }
     return ERR_OK;
 }
 
@@ -187,28 +207,7 @@ int kpd_priority(int argc, char **argv)
 
 int kpd_sort(int argc, char **argv)
 {
-    (void)argv;
-    char all_done = '\0';
-    if (argc > 1)
-    {
-        kpd_error(ERR_USAGE, "too many arguments");
-    }
-    else if (argc == 1)
-    {
-        const char *option = argv[0];
-        all_done = resolve_all_done(option);
-        if (all_done == '\0') kpd_error(ERR_USAGE, "'%s' is not a valid option", option);
-    }
-
-    struct EntryBuffer entries = { 0 };
-    kpd_read(&entries);
-    sqsort(&entries.p, entries.size, sizeof(*entries.p), entries_compare);
-    for (const struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++)
-    {
-        kpd_print(entry);
-    }
-    entries_finalize(&entries);
-    return ERR_OK;
+    return kpd_list_or_sort(argc, argv, true);
 }
 
 int kpd_test(int argc, char **argv)
@@ -228,56 +227,38 @@ int kpd_version(int argc, char **argv)
     return ERR_OK;
 }
 
-Command *resolve_command(const char *command)
-{
-    //Can be resolved using first letter only
-    const char *resolved_command;
-    Command *resolved_command_f;
-    switch (command[0])
-    {
-        case 'a': resolved_command = "add";         resolved_command_f = &kpd_add;      break;
-        case 'c': resolved_command = "clear";       resolved_command_f = &kpd_clear;    break;
-        case 'd': resolved_command = "done";        resolved_command_f = &kpd_done;     break;
-        case 'e': resolved_command = "edit";        resolved_command_f = &kpd_edit;     break;
-        case 'f': resolved_command = "find";        resolved_command_f = &kpd_find;     break;
-        case 'h': resolved_command = "help";        resolved_command_f = &kpd_help;     break;
-        case 'i': resolved_command = "init";        resolved_command_f = &kpd_init;     break;
-        case 'l': resolved_command = "list";        resolved_command_f = &kpd_list;     break;
-        case 'n': resolved_command = "next";        resolved_command_f = &kpd_next;     break;
-        case 'p': resolved_command = "priority";    resolved_command_f = &kpd_priority; break;
-        case 's': resolved_command = "sort";        resolved_command_f = &kpd_sort;     break;
-        case 't': resolved_command = "test";        resolved_command_f = &kpd_test;     break;
-        case 'v': resolved_command = "version";     resolved_command_f = &kpd_version;  break;
-        default: return NULL;
-    }
-    const size_t command_length = strlen(command);
-    const size_t resolved_command_length = strlen(resolved_command);
-    if (command_length <= resolved_command_length && memcmp(command, resolved_command, command_length) == 0) return resolved_command_f;
-    else return NULL;
-}
-
 int main(int argc, char **argv)
 {
     if (argc <= 1)
     {
-        //no arguments
+        //No arguments
         return kpd_sort(0, NULL);
     }
     else if (argv[1][0] == '-')
     {
-        //auxiliary arguments
+        //Auxiliary arguments
         if (argc != 2) kpd_error(ERR_USAGE, "too many options");
-        const char *option = argv[1];
-        if (strcmp(option, "-h") == 0 || strcmp(option, "--help") == 0) return kpd_help(0, NULL);
-        else if (strcmp(option, "-v") == 0 || strcmp(option, "--version") == 0) return kpd_version(0, NULL);
-        else kpd_error(ERR_USAGE, "'%s' is not a valid option", option);
+        const char *option_string = argv[1];
+        if (strcmp(option_string, "-h") == 0 || strcmp(option_string, "--help") == 0) return kpd_help(0, NULL);
+        else if (strcmp(option_string, "-v") == 0 || strcmp(option_string, "--version") == 0) return kpd_version(0, NULL);
+        else kpd_error(ERR_USAGE, "'%s' is not a valid option", option_string);
     }
     else
     {
-        //main operation
-        const char *command = argv[1];
-        Command *command_f = resolve_command(command);
-        if (command_f != NULL) return command_f(argc - 2, argv + 2);
-        else kpd_error(ERR_USAGE, "'%s' is not a valid command", command);
+        //Main operation
+        Command *commands[] =
+        {
+            kpd_add, kpd_clear, kpd_done, kpd_edit, kpd_find, kpd_help, kpd_init, kpd_list, kpd_next, kpd_priority, kpd_sort, kpd_test, kpd_version
+        };
+        const char *command_strings[] =
+        {
+            "add", "clear", "done", "edit", "find", "help", "init", "list", "next", "priority", "sort", "test", "version"
+        };
+        const char *command_string = argv[1];
+        size_t command_index;
+        if (!string_resolve(&command_index, command_string, command_strings, sizeof(command_strings)/sizeof(*command_strings)))
+            kpd_error(ERR_USAGE, "'%s' is not a valid command", command_string);
+        Command *command = commands[command_index];
+        if (command != NULL) return command(argc - 2, argv + 2);
     }
 }

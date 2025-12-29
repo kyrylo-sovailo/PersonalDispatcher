@@ -1,6 +1,7 @@
 #include "kpd.h"
 
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,43 +18,50 @@ void kpd_error(enum Error error, const char *format, ...)
     exit((int)error);
 }
 
-void kpd_parse(struct Entry *entry, struct CharBuffer *line)
+static bool kpd_parse(struct Entry *entry, struct CharBuffer *line)
 {
-    if (line->size < 5
+    //Empty lines
+    if (strspn(line->p, " \t\n\r") == line->size) return false;
+
+    //Parse beginning
+    if (line->size < 7
     || line->p[0] != ' '
     || line->p[1] != '-'
     || line->p[2] != ' '
     || line->p[3] != '['
     || (line->p[4] != ' ' && line->p[4] != 'X')
     || line->p[5] != ']'
-    || line->p[6] != ' ') kpd_error(ERR_FORMAT, "invalid line '%s'", line);
+    || line->p[6] != ' ') kpd_error(ERR_FORMAT, "invalid line '%s'", line->p);
     entry->done = line->p[4] == 'X';
     
+    //Parse priority
     entry->priority = PRI_MEDIUM;
     entry->priority_present = false;
     const char *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
     for (enum Priority priority = 0; priority < 4; priority++)
     {
-        const size_t marker_length = strlen(markers[priority]);
         char *marker_found = strstr(line->p, markers[priority]);
         if (marker_found != NULL)
         {
+            //Remove marker
             entry->priority = priority;
             entry->priority_present = true;
-            memmove(marker_found, marker_found + marker_length, line->size - marker_length + 1);
-            line->size -= marker_length;
+            string_remove(line, (size_t)(marker_found - line->p), strlen(markers[priority]));
             break;
         }
     }
 
+    //Allocate
+    string_trim(line, 7, 0); //Not really efficient
     entry->description = malloc(line->size + 1);
     if (entry->description == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
     memcpy(entry->description, line->p, line->size + 1);
+    return true;
 }
 
 void *kpd_read(struct EntryBuffer *entries)
 {
-    //search for TODO.md
+    //Search for TODO.md
     struct CharBuffer path = { 0 };
     string_set_cwd(&path);
     string_append_file(&path);
@@ -62,49 +70,35 @@ void *kpd_read(struct EntryBuffer *entries)
     {
         file = fopen(path.p, "r+");
         if (file != NULL) break;
-        string_remove_file(&path);
-        string_remove_file(&path);
+        if (!string_remove_file(&path) || !string_remove_file(&path))
+            kpd_error(ERR_USAGE, "current directory does not contain " TARGET);
         string_append_file(&path);
     }
 
-    //parse TODO.md
+    //Parse TODO.md
     struct CharBuffer line = { 0 };
     string_set_size(&line, 8);
-    line.size = 0;
-    while (true)
+    size_t number = 0;
+    while (string_read(&line, file))
     {
-        //there are three possible actions to do: parse line, try again, stop
-        const char *result = fgets(line.p + line.size, (int)(line.capacity - line.size), file);
-        if (result == NULL)
+        
+        struct Entry entry = { 0 };
+        entry.number = number;
+        if (!kpd_parse(&entry, &line)) continue;
+        if (entries == NULL)
         {
-            if (line.size == 0) break; //nothing to parse, stop
-            else {} //something left to parse
+            free(entry.description);
         }
         else
         {
-            const char *endline = strchr(line.p, '\n');
-            if (endline == NULL)
-            {
-                //try again
-                const size_t old_capacity = line.capacity;
-                string_set_size(&line, 2 * line.capacity);
-                line.size = old_capacity;
-                continue;
-            }
-            else {} //something left to parse
+            entries_set_size(entries, number + 1);
+            entries->p[number] = entry;
         }
-
-        //parse
-        struct Entry entry = { 0 };
-        entry.number = entries->size;
-        kpd_parse(&entry, &line);
-        entries_set_size(entries, entries->size + 1);
-        entries->p[entries->size - 1] = entry;
-
-        //stop
-        if (result == NULL) break;
+        number++;
     }
 
+    //Cleanup
+    free(line.p);
     return file;
 }
 
@@ -148,15 +142,14 @@ void kpd_print(const struct Entry *entry)
 {
     const char *markers[4] =
     {
-        "(low)",
-        CYAN "(medium)" DEFAULT,
-        YELLOW "(high)" DEFAULT,
-        RED "(critical)" DEFAULT
+                "  (low)   ",
+        CYAN    " (medium) " DEFAULT,
+        YELLOW  "  (high)  " DEFAULT,
+        RED     "(critical)" DEFAULT
     };
     const char *marker;
-    if (entry->done) marker = " " GREEN "(done)" DEFAULT;
-    else if (entry->priority_present) marker = markers[entry->priority];
-    else marker = "";
+    if (entry->done) marker = GREEN "  (done)  " DEFAULT;
+    else marker = markers[entry->priority];
     
-    printf(" - %u. %s%s\n", (unsigned int)(entry->number + 1), entry->description, marker);
+    printf("%u. %s %s\n", (unsigned int)(entry->number + 1), marker, entry->description);
 }

@@ -27,7 +27,25 @@ void entries_finalize(struct EntryBuffer *entries)
     free(entries->p);
 }
 
-int entries_compare(const void *a, const void *b)
+bool entries_highest(size_t *index, const struct EntryBuffer *entries)
+{
+    const struct Entry *highest = NULL;
+    for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
+    {
+        if (highest == NULL || entry->priority > highest->priority) highest = entry;
+    }
+    if (highest == NULL)
+    {
+        return false;
+    }
+    else
+    {
+        *index = (size_t)(highest - entries->p);
+        return true;
+    }
+}
+
+static int entries_compare(const void *a, const void *b)
 {
     const struct Entry *ac = a;
     const struct Entry *bc = b;
@@ -37,12 +55,7 @@ int entries_compare(const void *a, const void *b)
     return difference;
 }
 
-const struct Entry *entries_highest(const struct EntryBuffer *entries)
+void entries_sort(const struct EntryBuffer *entries)
 {
-    const struct Entry *highest = entries->p;
-    for (const struct Entry *entry = entries->p + 1; entry < entries->p + entries->size; entry++)
-    {
-        if (entry->priority > highest->priority) highest = entry; //dont invoke entries_compare, entries are already sorted by number
-    }
-    return highest;
+    sqsort(entries->p, entries->size, sizeof(*entries->p), entries_compare);
 }

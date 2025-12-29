@@ -77,8 +77,8 @@ void kpd_print(const struct Entry *entry);
 //entries.c
 void entries_set_size(struct EntryBuffer *entries, size_t size);
 void entries_finalize(struct EntryBuffer *entries);
-int entries_compare(const void *a, const void *b);
-const struct Entry *entries_highest(const struct EntryBuffer *entries);
+bool entries_highest(size_t *index, const struct EntryBuffer *entries);
+void entries_sort(const struct EntryBuffer *entries);
 
 //sqsort.c
 void sqsort(void *buffer, size_t size, size_t element_size, Comparison *comparison);
@@ -87,6 +87,10 @@ void sqsort(void *buffer, size_t size, size_t element_size, Comparison *comparis
 void string_set_size(struct CharBuffer *string, size_t size);
 void string_set_cwd(struct CharBuffer *path);
 void string_append_file(struct CharBuffer *path);
-void string_remove_file(struct CharBuffer *path);
+bool string_remove_file(struct CharBuffer *path);
+void string_remove(struct CharBuffer *string, size_t begin, size_t size);
+void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces);
+bool string_read(struct CharBuffer *string, void *file);
+bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size);
 
 #endif

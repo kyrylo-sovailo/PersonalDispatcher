@@ -18,10 +18,9 @@ void memswp(void *a, void *b, size_t size)
 void sqsort_small(void *buffer, size_t size, size_t element_size, Comparison *comparison)
 {
     char *as = buffer;
-    char *bs = as + element_size;    
-    int c = comparison(as, bs); //first pair
+    char *bs = as + element_size;
     bool change = false;
-    if (c < 0) { memswp(as, bs, element_size); change = true; }
+    if (comparison(as, bs) < 0) { memswp(as, bs, element_size); change = true; } //first pair
 
     while (true)
     {
@@ -54,11 +53,11 @@ void sqsort_internal(void *buffer, void *shadow, size_t size, size_t element_siz
     char *b2s = b1s + element_size * b1n;
     size_t b2n = (size + 1) / 2;
 
-    //recursive call
+    //Recursive call
     sqsort_internal(b1s, shadow, b1n, element_size, comparison);
     sqsort_internal(b2s, shadow, b2n, element_size, comparison);
 
-    //merge to shadow
+    //Merge to shadow
     while (true)
     {
         if (comparison(b1s, b2s) < 0)
@@ -79,7 +78,7 @@ void sqsort_internal(void *buffer, void *shadow, size_t size, size_t element_siz
         }
     }
 
-    //copy shadow back
+    //Copy shadow back
     memcpy(buffer, shadow, size * element_size);
 }
 

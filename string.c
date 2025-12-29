@@ -2,6 +2,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <unistd.h>
 
 void string_set_size(struct CharBuffer *string, size_t size)
@@ -10,22 +11,29 @@ void string_set_size(struct CharBuffer *string, size_t size)
     {
         size_t new_capacity = (string->capacity == 0) ? 1 : string->capacity;
         while (size + 1 > new_capacity) new_capacity <<= 1;
-        char *new_p = realloc(string->p, (new_capacity + 1) * sizeof(*string->p));
+        char *new_p = realloc(string->p, new_capacity * sizeof(*string->p));
         if (new_p == NULL) kpd_error(ERR_REALLOC, "realloc() failed");
         string->capacity = new_capacity;
         string->p = new_p;
-        memset(&string->p[string->size], 0, (size - string->size + 1) * sizeof(*string->p));
     }
     string->size = size;
+    string->p[size] = '\0';
 }
 
 void string_set_cwd(struct CharBuffer *path)
 {
-    string_set_size(path, 128);
+    string_set_size(path, 8);
     while (true)
     {
-        if (getcwd(path->p, path->size + 1) == NULL) string_set_size(path, path->size << 1);
-        else { path->size = strlen(path->p); break; }
+        if (getcwd(path->p, path->capacity) == NULL)
+        {
+            string_set_size(path, 2 * path->size);
+        }
+        else
+        {
+            path->size = strlen(path->p);
+            break;
+        }
     }
 }
 
@@ -34,21 +42,96 @@ void string_append_file(struct CharBuffer *path)
     const char *filename = "/" TARGET;
     const bool slash_last = path->p[path->size-1] == '/';
     string_set_size(path, path->size + strlen(filename) - (slash_last ? 1 : 0));
-    memcpy(&path->p[path->size - strlen(filename)], filename, strlen(filename));
+    memcpy(&path->p[path->size - strlen(filename)], filename, strlen(filename) + 1);
 }
 
-void string_remove_file(struct CharBuffer *path)
+bool string_remove_file(struct CharBuffer *path)
 {
     const bool slash_last = path->p[path->size-1] == '/';
-    if (slash_last) { path->size--; path->p[path->size] = '0'; }
-    char *previous_slash = strrchr(path->p, '/');
-    if (previous_slash == NULL || previous_slash == path->p)
+    if (slash_last) { path->size--; path->p[path->size] = '\0'; }
+    const char *previous_slash = strrchr(path->p, '/');
+    if (previous_slash == NULL) return false; //No slash
+    if (previous_slash == path->p) return false; //Slash on first position
+    path->size = (size_t)(previous_slash - path->p);
+    path->p[path->size] = '\0';
+    return true;
+}
+
+void string_remove(struct CharBuffer *string, size_t begin, size_t size)
+{
+    memmove(string->p + begin, string->p + begin + size, string->size - begin - size + 1);
+    string->size -= size;
+}
+
+void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces)
+{
+    //Count beginning space
+    beginning_spaces = strspn(string->p + beginning_spaces, " \t\n\r") + beginning_spaces;
+    if (beginning_spaces == string->size)
     {
-        kpd_error(ERR_PATH, TARGET " not found in current directory or its parents", path->p);
+        //Spaces only
+        string->size = 0;
+        string->p[0] = '\0';
+        return;
     }
-    else
+    
+    //Count ending space
+    while (ending_spaces < string->size && strchr(" \t\n\r", string->p[string->size - ending_spaces - 1]) != NULL)
     {
-        *previous_slash = '\0';
-        path->size = (size_t)(previous_slash - path->p);
+        ending_spaces++;
     }
+    
+    //Move
+    const size_t spaces = beginning_spaces + ending_spaces;
+    if (beginning_spaces > 0) memmove(string->p, string->p + beginning_spaces, string->size - spaces);
+    string->size -= spaces;
+    string->p[string->size] = '\0';
+}
+
+bool string_read(struct CharBuffer *line, void *file)
+{
+    line->size = 0;
+    while (true)
+    {
+        //There are three possible actions to do: parse line, try again, stop
+        const char *result = fgets(line->p + line->size, (int)(line->capacity - line->size), file); //Puts '\0'
+        if (result == NULL)
+        {
+            if (line->size == 0) return false; //Nothing to parse, stop
+            else return true; //Something left to parse
+        }
+        else
+        {
+            const char *endline = memchr(line->p, '\n', line->capacity - 1);
+            if (endline == NULL)
+            {
+                //Endline not read, try again
+                const size_t size = line->capacity - 1; //Meaningful read symbols
+                line->size = size;
+                string_set_size(line, 2 * size);
+                line->size = size;
+            }
+            else
+            {
+                //Endline read, can parse
+                line->size = (size_t)(endline - line->p) + 1; //String is one longer than endline
+                return true;
+            }
+        }
+    }   
+}
+
+bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size)
+{
+    const size_t option_length = strlen(option);
+    for (size_t i = 0; i < options_size; i++)
+    {
+        if (strncmp(option, options[i], option_length) == 0)
+        {
+            //Option is a substring, can't resolve ambiguity yet
+            *index = i;
+            return true;
+        }
+    }
+    return false;
 }
