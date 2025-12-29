@@ -9,6 +9,5 @@ add_executable(kpd
 common.c
 entries.c
 main.c
-sqsort.c
 string.c
 )

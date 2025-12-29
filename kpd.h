@@ -80,9 +80,6 @@ void entries_finalize(struct EntryBuffer *entries);
 bool entries_highest(size_t *index, const struct EntryBuffer *entries);
 void entries_sort(const struct EntryBuffer *entries);
 
-//sqsort.c
-void sqsort(void *buffer, size_t size, size_t element_size, Comparison *comparison);
-
 //string.c
 void string_set_size(struct CharBuffer *string, size_t size);
 void string_set_cwd(struct CharBuffer *path);

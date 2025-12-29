@@ -49,7 +49,7 @@ static int entries_compare(const void *a, const void *b)
 {
     const struct Entry *ac = a;
     const struct Entry *bc = b;
-    int difference = (int)(ac->priority) - (int)(bc->priority);
+    int difference = (int)(bc->priority) - (int)(ac->priority);
     if (difference != 0) return difference;
     difference = (int)(ac->number) - (int)(bc->number);
     return difference;
@@ -57,5 +57,5 @@ static int entries_compare(const void *a, const void *b)
 
 void entries_sort(const struct EntryBuffer *entries)
 {
-    sqsort(entries->p, entries->size, sizeof(*entries->p), entries_compare);
+    qsort(entries->p, entries->size, sizeof(*entries->p), entries_compare);
 }
