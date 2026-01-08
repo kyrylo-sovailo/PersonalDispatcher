@@ -18,37 +18,40 @@ KPD requires GNU readline.
 
 ### Usage
 
-Usage: kpd [COMMAND [OPTIONS]]
+Usage: kpd [<command> <option>*]
 
 Placeholders:
-  <number>       Entry number, defaults to first entry with highest priority
-  <priority>     One of: low | medium | high | critical, defaults to 'medium'
-  <directory>    Directory to contain TODO.md, defaults to current directory
-  <description>  Description of the entry
-  <action>       Action to be performed on found entries, one of:
-                   clear [commit] | done [commit] | priority <priority> | edit
+  <number>      Entry number or comma-separated list, defaults to task with highest priority
+  <priority>    One of: low | medium | high | critical, defaults to 'medium'
+  <directory>   Directory to contain TODO.md, defaults to current directory
+  <description> Description of the task
+  <action>      Action to be performed on found entries, one of:
+                  <commit> | remove <commit> | done <commit> | undo <commit> |
+                  priority <priority> | edit [<description>]
+  <commit>      'commit' suffix. Format: commit [<description>]
+                Use 'commit' suffix to:
+                  1. execute <action> and save TODO.md
+                  2. stage TODO.md
+                  3. call 'git commit' with an automatic (by default) commit message
 
 Commands:
   init     [<directory>]               Initialize kpd in a directory
-  add      [<priority>] <description>  Add entry
+  add      <description> [<priority>]  Add task
 
-  priority [<number>] <priority>       Set entry priority
-  edit     [<number>]                  Edit entry description
-  clear    [<number>] [commit]         Clear entry
-  done     [<number>] [commit]         Mark entry as done
+  priority [<number>] <priority>       Set task priority
+  edit     [<number>] [<description>]  Edit or set task description
+  commit   [<number>] [<description>]
+  remove   [<number>] [commit [<description>]]         Remove task
+  done     [<number>] [commit [<description>]]         Mark task as done
+  undo     [<number>] [commit [<description>]]                 Mark task as not done
 
-  find     <description> [<action>]    Find entry by description and execute command
+  find     <description> [<action>]    Find task by description and execute command
   list     [all|done] [<priority>]     List entries
   sort     [all|done]                  List entries sorted by priority (default command)
-  next                                 Print next entry
+  next                                 Print next task
   test                                 Check if TODO.md exists and has the correct format
 
   help    | --help    | -h             Print this help
   version | --version | -v             Print version
 
-All commands can be resolved by first letter
-
-Use 'commit' suffix to:
-  1. add changes to 
-  2. stage TODO.md
-  3. call 'git commit' with an automatic commit message
+All keywords can be resolved by first letter
