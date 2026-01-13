@@ -1,9 +1,8 @@
  - [ ] Implement clear
  - [ ] Implement done (priority: medium)
  - [ ] Implement add (priority: low)
-
  - [ ] Test low 1 (priority: low)
  - [ ] Test medium 2 (priority: medium)
  - [ ] Test medium 2 default
  - [ ] Test high 3 (priority: high)
- - [ ] Test critical 4 (priority: critical)
+ - [X] Test critical 4 (priority: critical)

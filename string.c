@@ -20,6 +20,39 @@ void string_set_size(struct CharBuffer *string, size_t size)
     string->p[size] = '\0';
 }
 
+bool string_set_line(struct CharBuffer *string, void *file)
+{
+    string->size = 0;
+    while (true)
+    {
+        //There are three possible actions to do: parse line, try again, stop
+        const char *result = fgets(string->p + string->size, (int)(string->capacity - string->size), file); //Puts '\0'
+        if (result == NULL)
+        {
+            if (string->size == 0) return false; //Nothing to parse, stop
+            else return true; //Something left to parse
+        }
+        else
+        {
+            const char *endline = memchr(string->p, '\n', string->capacity - 1);
+            if (endline == NULL)
+            {
+                //Endline not read, try again
+                const size_t size = string->capacity - 1; //Meaningful read symbols
+                string->size = size;
+                string_set_size(string, 2 * size);
+                string->size = size;
+            }
+            else
+            {
+                //Endline read, can parse
+                string->size = (size_t)(endline - string->p) + 1; //String is one longer than endline
+                return true;
+            }
+        }
+    }    
+}
+
 void string_set_cwd(struct CharBuffer *path)
 {
     string_set_size(path, 8);
@@ -35,6 +68,12 @@ void string_set_cwd(struct CharBuffer *path)
             break;
         }
     }
+}
+
+void string_finalize(struct CharBuffer *string)
+{
+    if (string->p == NULL) return;
+    memset(string, 0, sizeof(*string));
 }
 
 void string_append_file(struct CharBuffer *path)
@@ -88,47 +127,15 @@ void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t endi
     string->p[string->size] = '\0';
 }
 
-bool string_read(struct CharBuffer *line, void *file)
-{
-    line->size = 0;
-    while (true)
-    {
-        //There are three possible actions to do: parse line, try again, stop
-        const char *result = fgets(line->p + line->size, (int)(line->capacity - line->size), file); //Puts '\0'
-        if (result == NULL)
-        {
-            if (line->size == 0) return false; //Nothing to parse, stop
-            else return true; //Something left to parse
-        }
-        else
-        {
-            const char *endline = memchr(line->p, '\n', line->capacity - 1);
-            if (endline == NULL)
-            {
-                //Endline not read, try again
-                const size_t size = line->capacity - 1; //Meaningful read symbols
-                line->size = size;
-                string_set_size(line, 2 * size);
-                line->size = size;
-            }
-            else
-            {
-                //Endline read, can parse
-                line->size = (size_t)(endline - line->p) + 1; //String is one longer than endline
-                return true;
-            }
-        }
-    }   
-}
-
 bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size)
 {
+    //All options can be (so far) resolved by the first letter, so don't care about ambiguity
     const size_t option_length = strlen(option);
     for (size_t i = 0; i < options_size; i++)
     {
-        if (strncmp(option, options[i], option_length) == 0)
+        const size_t option_i_length = strlen(options[i]);
+        if (option_length <= option_i_length && memcmp(option, options[i], option_length) == 0)
         {
-            //Option is a substring, can't resolve ambiguity yet
             *index = i;
             return true;
         }

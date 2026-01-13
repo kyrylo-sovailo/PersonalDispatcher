@@ -1,5 +1,6 @@
 #include "kpd.h"
 
+#include <stdbool.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <string.h>
@@ -7,94 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-int kpd_add(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
-}
-
-int kpd_clear(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    struct EntryBuffer entries = { 0 };
-    kpd_read(&entries);
-
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
-}
-
-int kpd_done(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
-}
-
-int kpd_edit(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
-}
-
-int kpd_find(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
-    return ERR_OK;
-}
-
-int kpd_help(int argc, char **argv)
-{
-    (void)argv;
-    if (argc > 0) kpd_error(ERR_USAGE, "too many options");
-    printf(
-        "Kyrylo's Personal Dispatcher, version " VERSION "\n"
-        "Usage: kpd [COMMAND [OPTIONS]]\n"
-        "\n"
-        "Placeholders:\n"
-        "  <number>       Entry number, defaults to first entry with highest priority\n"
-        "  <priority>     One of: low | medium | high | critical, defaults to 'medium'\n"
-        "  <directory>    Directory to contain " TARGET ", defaults to current directory\n"
-        "  <description>  Description of the entry\n"
-        "  <action>       Action to be performed on found entries, one of:\n"
-        "                   clear [commit] | done [commit] | priority <priority> | edit\n"
-        "\n"
-        "Commands:\n"
-        "  init     [<directory>]               Initialize kpd in a directory\n"
-        "  add      [<priority>] <description>  Add entry\n"
-        "\n"
-        "  priority [<number>] <priority>       Set entry priority\n"
-        "  edit     [<number>]                  Edit entry description\n"
-        "  clear    [<number>] [commit]         Clear entry\n"
-        "  done     [<number>] [commit]         Mark entry as done\n"
-        "\n"
-        "  find     <description> [<action>]    Find entry by description and execute command\n"
-        "  list     [all|done] [<priority>]     List entries\n"
-        "  sort     [all|done]                  List entries sorted by priority (default command)\n"
-        "  next                                 Print next entry\n"
-        "  test                                 Check if " TARGET " exists and has the correct format\n"
-        "\n"
-        "  help    | --help    | -h             Print this help\n"
-        "  version | --version | -v             Print version\n"
-        "\n"
-        "All commands can be resolved by first letter\n"
-        "\n"
-        "Use 'commit' suffix to:\n"
-        "  1. add changes to " "\n"
-        "  2. stage " TARGET "\n"
-        "  3. call 'git commit' with an automatic commit message\n"
-    );
-    return ERR_OK;
-}
-
-int kpd_init(int argc, char **argv)
+static int kpd_init(int argc, char **argv)
 {
     //Parse options
     struct CharBuffer path = { 0 };
@@ -133,71 +47,155 @@ int kpd_init(int argc, char **argv)
     }
 
     //Cleanup
-    free(path.p);
+    string_finalize(&path);
     return ERR_OK;
 }
 
-int kpd_list_or_sort(int argc, char **argv, bool sort)
+static int kpd_add(int argc, char **argv)
 {
     //Parse options
-    const char *options[] = { "all", "done" };
-    size_t option_index = (size_t)-1;
-    if (argc > 1)
+    struct Entry entry;
+    if (argc == 0) kpd_error(ERR_USAGE, "too few arguments");
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    entry.priority = PRI_MEDIUM;
+    entry.priority_explicit = false;
+    entry.description = strdup(argv[0]);
+    if (entry.description == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
+    if (argc == 2)
     {
-        kpd_error(ERR_USAGE, "too many arguments");
-    }
-    else if (argc == 1)
-    {
-        const char *option = argv[0];
-        if (!string_resolve(&option_index, option, options, sizeof(options)/sizeof(*options)))
-            kpd_error(ERR_USAGE, "'%s' is not a valid option", option);
+        if (kpd_resolve_priority(&entry.priority, argv[1])) entry.priority_explicit = true;
+        else kpd_error(ERR_USAGE, "'%s' is not a valid priority", argv[1]);
     }
 
     //Parse TODO.md
     struct EntryBuffer entries = { 0 };
-    kpd_read(&entries);
-    if (sort) entries_sort(&entries);
+    FILE *file = kpd_read_target(&entries);
+
+    //Modify TODO.md
+    entry.number = entries.size;
+    entry.done = false;
+    entries_set_size(&entries, entry.number + 1);
+    entries.p[entry.number] = entry;
+
+    //Write TODO.md
+    kpd_write_target(file, &entries);
 
     //Print
-    for (const struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++)
-    {
-        bool print;
-        if (option_index == 0) print = true;
-        else if (option_index == 1) print = entry->done;
-        else print = !entry->done;
-        if (print) kpd_print(entry);
-    }
+    kpd_print_entry(&entry, 0, 0);
 
     //Cleanup
-    entries_finalize(&entries);
+    fclose(file);
+    entries_finalize(&entries, true);
     return ERR_OK;
 }
 
-int kpd_list(int argc, char **argv)
+static int kpd_priority(int argc, char **argv)
 {
-    return kpd_list_or_sort(argc, argv, false);
-}
+    //Parse options
+    const char *number_string = NULL;
+    enum Priority priority = PRI_MEDIUM;
+    bool priority_explicit = false;
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    if (argc == 1)
+    {
+        if (kpd_parse_number(NULL, 0, argv[0])) number_string = argv[0];
+        else if (kpd_resolve_priority(&priority, argv[0])) priority_explicit = true;
+        else kpd_error(ERR_USAGE, "'%s' is not a valid number or priority", argv[0]);
+    }
+    else if (argc == 2)
+    {
+        if (!kpd_parse_number(NULL, 0, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid number", argv[0]);
+        if (!kpd_resolve_priority(&priority, argv[1])) kpd_error(ERR_USAGE, "'%s' is not a valid priority", argv[1]);
+        number_string = argv[0];
+        priority_explicit = true;
+    }
 
-int kpd_next(int argc, char **argv)
-{
-    (void)argv;
-    if (argc > 0) kpd_error(ERR_USAGE, "too many arguments");
+    //Read TODO.md
     struct EntryBuffer entries = { 0 };
-    kpd_read(&entries);
-    size_t highest_index;
-    if (!entries_highest(&highest_index, &entries))
+    FILE *file = kpd_read_target(&entries);
+
+    //Modify TODO.md
+    char *mask = kpd_create_mask(number_string, &entries);
+    const char *mask_i = mask;
+    bool changes = false;
+    for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
     {
-        printf("Nothing to do\n");
+        if (!*mask_i) continue;
+        changes |= (entry->priority != priority);
+        changes |= (!!entry->priority_explicit != !!priority_explicit);
+        entry->priority = priority;
+        entry->priority_explicit = priority_explicit;
     }
-    else
-    {
-        kpd_print(&entries.p[highest_index]);
-        entries_finalize(&entries);
-    }
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, &entries);
+
+    //Print
+    kpd_print_entries(&entries, mask);
+
+    //Cleanup
+    free(mask);
+    fclose(file);
+    entries_finalize(&entries, true);
     return ERR_OK;
 }
 
-int kpd_priority(int argc, char **argv)
+static int kpd_edit(int argc, char **argv)
+{
+    //Parse options
+    const char *number_string = NULL;
+    struct CharBuffer description = { 0 };
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    if (argc == 1)
+    {
+        if (kpd_parse_number(NULL, 0, argv[0])) number_string = argv[0];
+        else description.p = argv[0];
+    }
+    else if (argc == 2)
+    {
+        if (!kpd_parse_number(NULL, 0, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid number", argv[0]);
+        number_string = argv[0];
+        description.p = argv[1];
+    }
+
+    //Read TODO.md
+    struct EntryBuffer entries = { 0 };
+    FILE *file = kpd_read_target(&entries);
+
+    //Modify TODO.md
+    char *mask = kpd_create_mask(number_string, &entries);
+    if (description.p == NULL)
+    {
+        printf("Enter new description: ");
+        string_set_line(&description, stdin);
+        string_trim(&description, 0, 0);
+    }
+    const char *mask_i = mask;
+    bool changes = false;
+    for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
+    {
+        if (!*mask_i) continue;
+        changes |= (strcmp(entry->description, description.p) != 0);
+        free(entry->description);
+        entry->description = strdup(description.p);
+        if (entry->description == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
+    }
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, &entries);
+
+    //Print
+    kpd_print_entries(&entries, mask);
+
+    //Cleanup
+    free(mask);
+    fclose(file);
+    entries_finalize(&entries, true);
+    if (description.capacity != 0) string_finalize(&description);
+    return ERR_OK;
+}
+
+static int kpd_commit(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
@@ -205,25 +203,300 @@ int kpd_priority(int argc, char **argv)
     return ERR_OK;
 }
 
-int kpd_sort(int argc, char **argv)
+static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
 {
-    return kpd_list_or_sort(argc, argv, true);
-}
+    //Parse options
+    const char *number_string = NULL;
+    bool commit_suffix = false;
+    struct CharBuffer commit_message = { 0 };
+    if (argc > 3) kpd_error(ERR_USAGE, "too many arguments");
+    if (argc == 1)
+    {
+        if (kpd_parse_number(NULL, 0, argv[0])) number_string = argv[0];
+        else if (kpd_resolve_commit(argv[0])) commit_suffix = true;
+        else kpd_error(ERR_USAGE, "'%s' is not a valid number or 'commit' suffix", argv[0]);
+    }
+    else if (argc == 2)
+    {
+        if (kpd_parse_number(NULL, 0, argv[0]))
+        {
+            if (kpd_resolve_commit(argv[1])) commit_suffix = true;
+            else kpd_error(ERR_USAGE, "'%s' is not a valid number or 'commit' suffix", argv[1]);
+            number_string = argv[0];
+        }
+        else if (kpd_resolve_commit(argv[0]))
+        {
+            commit_suffix = true;
+            commit_message.p = argv[1];
+        }
+        else kpd_error(ERR_USAGE, "'%s' is not a valid number or 'commit' suffix", argv[1]);
+    }
+    else if (argc == 3)
+    {
+        if (!kpd_parse_number(NULL, 0, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid number", argv[1]);
+        if (!kpd_resolve_commit(argv[1])) kpd_error(ERR_USAGE, "'%s' is not a valid 'commit' suffix", argv[1]);
+        number_string = argv[0];
+        commit_suffix = true;
+        commit_message.p = argv[2];
+    }
+    if (commit_suffix) kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
 
-int kpd_test(int argc, char **argv)
-{
-    (void)argc;
-    (void)argv;
-    kpd_read(NULL);
-    printf("All correct\n");
+    //Read TODO.md
+    struct EntryBuffer entries = { 0 };
+    struct EntryBuffer *entries_written = &entries;
+    FILE *file = kpd_read_target(&entries);
+
+    //Modify TODO.md
+    char *mask = kpd_create_mask(number_string, &entries);
+    bool changes = false;
+    struct EntryBuffer entries_copy = { 0 };
+    if (action == ACT_REMOVE)
+    {
+        entries_set_size(&entries_copy, entries.size);
+        entries_copy.size = 0;
+        const char *mask_i = mask;
+        for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
+        {
+            if (*mask_i) continue;
+            entries_copy.p[entries_copy.size] = *entry;
+            entries_copy.size++;
+        }
+        changes = true; //guaranteed from how the numbers are parsed
+        entries_written = &entries_copy; //print copy instead
+    }
+    else 
+    {
+        const char done = action == ACT_DONE;
+        const char *mask_i = mask;
+        for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
+        {
+            if (!*mask_i) continue;
+            changes |= (!!entry->done != !!done);
+            entry->done = done;
+        }
+    }
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, entries_written);
+
+    //Print
+    kpd_print_entries(&entries, mask);
+
+    //Cleanup
+    free(mask);
+    fclose(file);
+    entries_finalize(&entries, true);
+    if (commit_message.capacity != 0) string_finalize(&commit_message);
     return ERR_OK;
 }
 
-int kpd_version(int argc, char **argv)
+static int kpd_remove(int argc, char **argv)
+{
+    return kpd_remove_or_done_or_undo(argc, argv, ACT_REMOVE);
+}
+
+static int kpd_done(int argc, char **argv)
+{
+    return kpd_remove_or_done_or_undo(argc, argv, ACT_DONE);
+}
+
+static int kpd_undo(int argc, char **argv)
+{
+    return kpd_remove_or_done_or_undo(argc, argv, ACT_UNDO);
+}
+
+static int kpd_find(int argc, char **argv)
+{
+    (void)argc;
+    (void)argv;
+    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
+    return ERR_OK;
+}
+
+static int kpd_list(int argc, char **argv)
+{
+    //Parse options
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    enum Status status = STA_OPEN;
+    enum Priority priority = PRI_MEDIUM;
+    bool priority_explicit = false;
+    if (argc == 1)
+    {
+        if (kpd_resolve_status(&status, argv[0])) { /*do nothing*/ }
+        else if (kpd_resolve_priority(&priority, argv[0])) priority_explicit = true;
+        else kpd_error(ERR_USAGE, "'%s' is not a valid status or priority", argv[0]);
+    }
+    else if (argc == 2)
+    {
+        if (!kpd_resolve_status(&status, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid status", argv[0]);
+        if (!kpd_resolve_priority(&priority, argv[1])) kpd_error(ERR_USAGE, "'%s' is not a valid priority", argv[1]);
+        priority_explicit = true;
+    }
+
+    //Parse TODO.md
+    struct EntryBuffer entries = { 0 };
+    FILE *file = kpd_read_target(&entries);
+
+    //Print
+    char *mask = NULL;
+    if (status != STA_ALL || priority_explicit)
+    {
+        mask = malloc(entries.size);
+        if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+        memset(mask, '\0', entries.size);
+        char *mask_i = mask;
+        for (const struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
+        {
+            const bool priority_match = !priority_explicit || entry->priority == priority;
+            bool print;
+            if (status == STA_OPEN) print = priority_match & !entry->done;
+            else if (status == STA_DONE) print = priority_match & entry->done;
+            else print = priority_match;
+            if (print) *mask_i = '\1';
+        }
+    }
+    kpd_print_entries(&entries, mask);
+
+    //Cleanup
+    if (mask != NULL) free(mask);
+    fclose(file);
+    entries_finalize(&entries, true);
+    return ERR_OK;
+}
+
+static int kpd_sort(int argc, char **argv)
+{
+    //Parse options
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    enum Status status = STA_OPEN;
+    if (argc == 1)
+    {
+        if (!kpd_resolve_status(&status, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid status or priority", argv[0]);
+    }
+
+    //Parse TODO.md
+    struct EntryBuffer entries = { 0 };
+    FILE *file = kpd_read_target(&entries);
+
+    //Print
+    entries_sort(&entries);
+    char *mask = malloc(entries.size);
+    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    memset(mask, '\0', entries.size);
+    char *mask_i = mask;
+    for (const struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
+    {
+        bool print;
+        if (status == STA_OPEN) print = !entry->done;
+        else if (status == STA_DONE) print = entry->done;
+        else print = true;
+        if (print) *mask_i = '\1';
+    }
+    kpd_print_entries(&entries, mask);
+
+    //Cleanup
+    free(mask);
+    fclose(file);
+    entries_finalize(&entries, true);
+    return ERR_OK;
+}
+
+static int kpd_next(int argc, char **argv)
+{
+    //Parse options
+    (void)argv;
+    if (argc > 0) kpd_error(ERR_USAGE, "too many arguments");
+
+    //Parse TODO.md
+    struct EntryBuffer entries = { 0 };
+    FILE *file = kpd_read_target(&entries);
+
+    //Print
+    size_t highest_index;
+    if (!entries_highest(&highest_index, &entries)) printf("Nothing to do\n");
+    else kpd_print_entry(&entries.p[highest_index], 0, 0);
+
+    //Cleanup
+    fclose(file);
+    entries_finalize(&entries, true);
+    return ERR_OK;
+}
+
+static int kpd_test(int argc, char **argv)
+{
+    //Parse options
+    (void)argv;
+    if (argc > 0) kpd_error(ERR_USAGE, "too many arguments");
+
+    //Parse TODO.md
+    FILE *file = kpd_read_target(NULL);
+
+    //Print
+    printf("All correct\n");
+
+    //Cleanup
+    fclose(file);
+    return ERR_OK;
+}
+
+static int kpd_help(int argc, char **argv)
 {
     (void)argv;
     if (argc > 0) kpd_error(ERR_USAGE, "too many options");
+    printf(
+        "Kyrylo's Personal Dispatcher, version " VERSION "\n"
+        "\n"
+        "Placeholders:\n"
+        "  <number>      Entry number or comma-separated list, defaults to task with highest priority\n"
+        "  <priority>    One of: low | medium | high | critical, defaults to 'medium'\n"
+        "  <status>      One of: all | open | done, defaults to 'open'\n"
+        "  <directory>   Directory to contain TODO.md, defaults to current directory\n"
+        "  <description> Description of the task\n"
+        "  <action>      Action to be performed on found entries, one of:\n"
+        "                  <commit> | remove <commit> | done <commit> | undo <commit> |\n"
+        "                  priority <priority> | edit [<description>]\n"
+        "  <commit>      'commit' suffix. Format: commit [<message>]\n"
+        "                Use 'commit' suffix to:\n"
+        "                  1. execute <action> and save TODO.md\n"
+        "                  2. stage TODO.md\n"
+        "                  3. call 'git commit' with an automatic (by default) commit message\n"
+        "\n"
+        "Commands:\n"
+        "  init      [<directory>]               Initialize kpd in a directory\n"
+        "  add       <description> [<priority>]  Add task\n"
+        "\n"
+        "  priority  [<number>] [<priority>]     Set task priority\n"
+        "  edit      [<number>] [<description>]  Edit or set task description\n"
+        "  commit    [<number>] [<description>]  Perform git commit, see description of <commit>\n"
+        "  remove    [<number>] [<commit>]       Remove task\n"
+        "  done      [<number>] [<commit>]       Mark task as done\n"
+        "  undo      [<number>] [<commit>]       Mark task as not done, defaults to latest done task\n"
+        "\n"
+        "  list      [<status>] [<priority>]     List entries\n"
+        "  sort      [<status>]                  List entries sorted by priority (default command)\n"
+        "  next                                  Print next task\n"
+        "  test                                  Check if TODO.md exists and has the correct format\n"
+        "  find      <description>\n"
+        "            [<status>] [<action>]       Find task by description and execute command\n"
+        "\n"
+        "  help    | --help    | -h              Print this help\n"
+        "  version | --version | -v              Print version\n"
+        "\n"
+        "All keywords can be resolved by first letter\n"
+    );
+    return ERR_OK;
+}
+
+static int kpd_version(int argc, char **argv)
+{
+    //Parse options
+    (void)argv;
+    if (argc > 0) kpd_error(ERR_USAGE, "too many options");
+
+    //Print
     printf("Kyrylo's Personal Dispatcher, version " VERSION "\n");
+
+    //Cleanup
     return ERR_OK;
 }
 
@@ -248,11 +521,17 @@ int main(int argc, char **argv)
         //Main operation
         Command *commands[] =
         {
-            kpd_add, kpd_clear, kpd_done, kpd_edit, kpd_find, kpd_help, kpd_init, kpd_list, kpd_next, kpd_priority, kpd_sort, kpd_test, kpd_version
+            kpd_init, kpd_add,
+            kpd_priority, kpd_edit, kpd_commit, kpd_remove, kpd_done, kpd_undo,
+            kpd_find, kpd_list, kpd_sort, kpd_next, kpd_test,
+            kpd_help, kpd_version
         };
         const char *command_strings[] =
         {
-            "add", "clear", "done", "edit", "find", "help", "init", "list", "next", "priority", "sort", "test", "version"
+            "init", "add",
+            "priority", "edit", "commit", "remove", "done", "undo",
+            "find", "list", "sort", "next", "test",
+            "help", "version"
         };
         const char *command_string = argv[1];
         size_t command_index;

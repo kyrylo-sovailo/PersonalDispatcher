@@ -18,13 +18,18 @@ void entries_set_size(struct EntryBuffer *entries, size_t size)
     entries->size = size;
 }
 
-void entries_finalize(struct EntryBuffer *entries)
+void entries_finalize(struct EntryBuffer *entries, bool free_descriptions)
 {
-    for (const struct Entry *entry = entries->p + 1; entry < entries->p + entries->size; entry++)
+    if (entries->p == NULL) return;
+    if (free_descriptions)
     {
-        free(entry->description);
+        for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
+        {
+            free(entry->description);
+        }
     }
     free(entries->p);
+    memset(entries, 0, sizeof(*entries));
 }
 
 bool entries_highest(size_t *index, const struct EntryBuffer *entries)

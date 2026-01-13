@@ -8,8 +8,8 @@
 #define TARGET "TODO.md"
 
 typedef int (Command)(int argc, char **argv);
-typedef int (Comparison)(const void *a, const void *b);
 
+///Exit code
 enum Error
 {
     ERR_OK = 0,
@@ -37,6 +37,26 @@ enum Error
     ERR_NOT_IMPLEMENTED
 };
 
+///Action to be performed on after "find" command
+enum Action
+{
+    ACT_COMMIT,
+    ACT_REMOVE,
+    ACT_DONE,
+    ACT_UNDO,
+    ACT_PRIORITY,
+    ACT_EDIT
+};
+
+///Status to be added to "sort" and "list" commands
+enum Status
+{
+    STA_ALL,
+    STA_OPEN,
+    STA_DONE
+};
+
+///Priority of a entry
 enum Priority
 {
     PRI_LOW,
@@ -45,15 +65,17 @@ enum Priority
     PRI_CRITICAL
 };
 
+///Entry aka task
 struct Entry
 {
-    size_t number;
-    char *description;
-    enum Priority priority;
-    bool priority_present;
-    bool done;
+    size_t number;          ///< Entry number, zero-based
+    char *description;      ///< Plain text description
+    enum Priority priority; ///< Priority
+    bool priority_explicit; ///< Indicator if priority was given explicitly
+    bool done;              ///< Task is done
 };
 
+///Vector of entries
 struct EntryBuffer
 {
     struct Entry *p;
@@ -61,6 +83,7 @@ struct EntryBuffer
     size_t capacity;
 };
 
+///Vector of chars, size indicates the logical size, capacity indicates the allocated size (including null)
 struct CharBuffer
 {
     char *p;
@@ -69,25 +92,57 @@ struct CharBuffer
 };
 
 //common.c
-void kpd_error(enum Error error, const char *format, ...);
-void /*FILE*/ *kpd_read(struct EntryBuffer *buffer);
-void kpd_write(void /*FILE*/ *file, const struct EntryBuffer *entries);
-void kpd_print(const struct Entry *entry);
+///Prints error message and exits
+void kpd_error(enum Error error, const char *format, ...) __attribute__((noreturn)) __attribute__ ((format (printf, 2, 3)));
+///Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL)
+void *kpd_read_target(struct EntryBuffer *buffer);
+///Writes entries to the open FILE*
+void kpd_write_target(void *file, const struct EntryBuffer *entries);
+///Prints entry to stdout (max_length/max_marker_length are zero for no spaces)
+void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigned int max_marker_length);
+///Prints entries to stdout (if mask is NULL, prints all)
+void kpd_print_entries(const struct EntryBuffer *entries, const char *mask);
+///Parses number and sets mask (if mask is NULL, only checks format)
+bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string);
+///Sets mask based on parsed number (number_string is non-NULL) or based on highest priority (number_string is NULL)
+char *kpd_create_mask(const char *number_string, const struct EntryBuffer *entries);
+///Parses action string (if action is NULL, only checks)
+bool kpd_resolve_action(enum Action *action, const char *action_string);
+///Parses status string (if status is NULL, only checks)
+bool kpd_resolve_status(enum Status *status, const char *status_string);
+///Parses priority string (if priority is NULL, only checks)
+bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
+///Returns if string can be resolved as 'commit'
+bool kpd_resolve_commit(const char *commit_string);
 
 //entries.c
+///Sets buffer size
 void entries_set_size(struct EntryBuffer *entries, size_t size);
-void entries_finalize(struct EntryBuffer *entries);
+///Destroys buffer
+void entries_finalize(struct EntryBuffer *entries, bool free_descriptions);
+///Finds entry with highest priority
 bool entries_highest(size_t *index, const struct EntryBuffer *entries);
+///Sorts entries by priority, critical first
 void entries_sort(const struct EntryBuffer *entries);
 
 //string.c
+///Sets string size, size does not include '\0'
 void string_set_size(struct CharBuffer *string, size_t size);
+///Sets string to line read from file, returns whether read something
+bool string_set_line(struct CharBuffer *string, void *file);
+///Sets string to current working directory
 void string_set_cwd(struct CharBuffer *path);
+///Destroys buffer
+void string_finalize(struct CharBuffer *string);
+///Appends TODO.md to path
 void string_append_file(struct CharBuffer *path);
+///Removes last file or directory from path
 bool string_remove_file(struct CharBuffer *path);
+///Removes substring from string
 void string_remove(struct CharBuffer *string, size_t begin, size_t size);
+///Removes trailing and leading spaces from string
 void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces);
-bool string_read(struct CharBuffer *string, void *file);
+///Resolves string
 bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size);
 
 #endif
