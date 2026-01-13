@@ -18,6 +18,7 @@ KPD requires GNU readline.
 
 ### Usage
 
+```
 Usage: kpd [<command> <option>*]
 
 Placeholders:
@@ -57,3 +58,4 @@ Commands:
   version | --version | -v              Print version
 
 All keywords can be resolved by first letter
+```
