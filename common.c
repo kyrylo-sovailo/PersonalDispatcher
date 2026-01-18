@@ -1,5 +1,8 @@
 #include "kpd.h"
 
+#include <sys/wait.h>
+#include <unistd.h>
+
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -7,7 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 //Needed by kpd_print_entry
 #define BLACK           "\x1b[00;30m"
@@ -57,7 +59,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
             //Remove marker
             entry->priority = priority;
             entry->priority_explicit = true;
-            string_remove(line, (size_t)(marker_found - line->p), strlen(markers[priority]));
+            string_substitute(line, (size_t)(marker_found - line->p), strlen(markers[priority]), "", 0);
             break;
         }
     }
@@ -155,27 +157,27 @@ void kpd_error(enum Error error, const char *format, ...)
     exit((int)error);
 }
 
-void *kpd_read_target(struct EntryBuffer *entries)
+void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer *path)
 {
     //Search for TODO.md
-    struct CharBuffer path = { 0 };
-    string_set_cwd(&path);
-    string_append_file(&path);
-    FILE *file = NULL;
+    struct CharBuffer local_path = { 0 };
+    string_set_cwd(&local_path);
+    string_append_file(&local_path);
+    FILE *local_file = NULL;
     while (true)
     {
-        file = fopen(path.p, "r+");
-        if (file != NULL) break;
-        if (!string_remove_file(&path) || !string_remove_file(&path))
+        local_file = fopen(local_path.p, "r+");
+        if (local_file != NULL) break;
+        if (!string_remove_file(&local_path) || !string_remove_file(&local_path))
             kpd_error(ERR_USAGE, "current_string directory does not contain " TARGET);
-        string_append_file(&path);
+        string_append_file(&local_path);
     }
 
     //Parse TODO.md
     struct CharBuffer line = { 0 };
     string_set_size(&line, 8);
     size_t number = 0;
-    while (string_set_line(&line, file))
+    while (string_set_line(&line, local_file))
     {
         
         struct Entry entry = { 0 };
@@ -195,7 +197,10 @@ void *kpd_read_target(struct EntryBuffer *entries)
 
     //Cleanup
     string_finalize(&line);
-    return file;
+    if (file == NULL) fclose(local_file);
+    else *((FILE**)file) = local_file;
+    if (path == NULL) string_finalize(&local_path);
+    else *path = local_path;
 }
 
 void kpd_write_target(void *file, const struct EntryBuffer *entries)
@@ -323,7 +328,7 @@ char *kpd_create_mask(const char *number_string, const struct EntryBuffer *entri
     if (number_string == NULL)
     {
         size_t highest;
-        if (!entries_highest(&highest, entries)) kpd_error(ERR_USAGE, "no entries");
+        if (!entries_highest(&highest, entries, NULL)) kpd_error(ERR_USAGE, "no entries");
         memset(mask, '\0', entries->size);
         mask[highest] = '\1';
     }
@@ -361,10 +366,35 @@ bool kpd_resolve_priority(enum Priority *priority, const char *priority_string)
     return result;
 }
 
-///Returns if string can be resolved as 'commit'
 bool kpd_resolve_commit(const char *commit_string)
 {
     const size_t commit_length = strlen(commit_string);
     const size_t only_option_length = strlen("commit");
     return commit_length <= only_option_length && memcmp(commit_string, "commit", commit_length) == 0;
+}
+
+void kpd_execute(char *const *arguments)
+{
+    for (char *const *argument = &arguments[0]; *argument != NULL; argument++)
+    {
+        const bool next = *(argument + 1) != NULL;
+        printf("%s%c", *argument, next ? ' ' : '\n');
+    }
+    return; //Pretend
+
+    const int id = vfork();
+    if (id < 0)
+    {
+        kpd_error(ERR_FORK, "vfork() failed");
+    }
+    else if (id == 0)
+    {
+        if (execvp(arguments[0], arguments) < 0) kpd_error(ERR_EXEC, "execvp() failed");
+    }
+    else
+    {
+        int status;
+        if (waitpid(id, &status, 0) < 0) kpd_error(ERR_WAIT, "waitpid() failed");
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) kpd_error(ERR_GIT, "'%s' failed", arguments[0]);
+    }
 }

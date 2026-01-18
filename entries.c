@@ -32,12 +32,14 @@ void entries_finalize(struct EntryBuffer *entries, bool free_descriptions)
     memset(entries, 0, sizeof(*entries));
 }
 
-bool entries_highest(size_t *index, const struct EntryBuffer *entries)
+bool entries_highest(size_t *index, const struct EntryBuffer *entries, const char *mask)
 {
+    const bool mask_valid = mask != NULL;
     const struct Entry *highest = NULL;
     for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
     {
-        if (highest == NULL || entry->priority > highest->priority) highest = entry;
+        if ((!mask_valid || *mask != '\0') && (highest == NULL || entry->priority > highest->priority)) highest = entry;
+        if (mask_valid) mask++;
     }
     if (highest == NULL)
     {

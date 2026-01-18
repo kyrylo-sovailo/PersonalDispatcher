@@ -1,8 +1,15 @@
- - [ ] Implement clear
- - [ ] Implement done (priority: medium)
- - [ ] Implement add (priority: low)
- - [ ] Test low 1 (priority: low)
- - [ ] Test medium 2 (priority: medium)
- - [ ] Test medium 2 default
- - [ ] Test high 3 (priority: high)
- - [X] Test critical 4 (priority: critical)
+ - [X] init
+ - [X] add
+ - [X] priority
+ - [ ] edit
+ - [ ] commit
+ - [ ] remove
+ - [ ] done
+ - [ ] undo
+ - [X] list
+ - [X] sort
+ - [X] next
+ - [X] test
+ - [ ] find
+ - [X] help
+ - [X] version

@@ -1,12 +1,13 @@
 #include "kpd.h"
 
-#include <stdbool.h>
-#include <sys/stat.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
 #include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static int kpd_init(int argc, char **argv)
 {
@@ -69,7 +70,8 @@ static int kpd_add(int argc, char **argv)
 
     //Parse TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    FILE *file;
+    kpd_read_target(&file, &entries, NULL);
 
     //Modify TODO.md
     entry.number = entries.size;
@@ -112,7 +114,8 @@ static int kpd_priority(int argc, char **argv)
 
     //Read TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    FILE *file;
+    kpd_read_target(&file, &entries, NULL);
 
     //Modify TODO.md
     char *mask = kpd_create_mask(number_string, &entries);
@@ -160,7 +163,8 @@ static int kpd_edit(int argc, char **argv)
 
     //Read TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    FILE *file;
+    kpd_read_target(&file, &entries, NULL);
 
     //Modify TODO.md
     char *mask = kpd_create_mask(number_string, &entries);
@@ -239,17 +243,34 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
         commit_suffix = true;
         commit_message.p = argv[2];
     }
-    if (commit_suffix) kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
 
     //Read TODO.md
     struct EntryBuffer entries = { 0 };
-    struct EntryBuffer *entries_written = &entries;
-    FILE *file = kpd_read_target(&entries);
+    FILE *file;
+    struct CharBuffer path;
+    kpd_read_target(&file, &entries, &path);
 
     //Modify TODO.md
     char *mask = kpd_create_mask(number_string, &entries);
+    if (commit_suffix && commit_message.p == NULL)
+    {
+        size_t index;
+        entries_highest(&index, &entries, mask); //guaranteed because if mask was empty, parsing would have failed
+        struct CharBuffer suggestion = { 0 };
+        string_substitute(&suggestion, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
+        if (action == ACT_DONE) string_description_to_done_commit(&suggestion);
+        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggestion);
+        else string_description_to_remove_commit(&suggestion);
+        const char *prompt         = "Suggested commit message        : ";
+        const char *prefill_prompt = "Commit message (Enter to accept): ";
+        string_set_input(&commit_message, prompt, suggestion.p, prefill_prompt);
+        if (commit_message.size == 0) { string_finalize(&commit_message); commit_message = suggestion; }
+        else string_finalize(&suggestion);
+    }
+
     bool changes = false;
     struct EntryBuffer entries_copy = { 0 };
+    struct EntryBuffer *entries_written = &entries;
     if (action == ACT_REMOVE)
     {
         entries_set_size(&entries_copy, entries.size);
@@ -257,11 +278,11 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
         const char *mask_i = mask;
         for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
         {
-            if (*mask_i) continue;
+            if (*mask_i) continue; //Skip removed entries
             entries_copy.p[entries_copy.size] = *entry;
             entries_copy.size++;
         }
-        changes = true; //guaranteed from how the numbers are parsed
+        changes = true; //guaranteed because if mask was empty, parsing would have failed
         entries_written = &entries_copy; //print copy instead
     }
     else 
@@ -282,8 +303,27 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     //Print
     kpd_print_entries(&entries, mask);
 
+    //Commit
+    if (commit_suffix)
+    {
+        char *arguments[5];
+        arguments[0] = "git";
+        arguments[1] = "add";
+        arguments[2] = path.p;
+        arguments[3] = NULL;
+        kpd_execute(arguments);
+
+        arguments[0] = "git";
+        arguments[1] = "commit";
+        arguments[2] = "-m";
+        arguments[3] = commit_message.p;
+        arguments[4] = NULL;
+        kpd_execute(arguments);
+    }
+
     //Cleanup
     free(mask);
+    string_finalize(&path);
     fclose(file);
     entries_finalize(&entries, true);
     if (commit_message.capacity != 0) string_finalize(&commit_message);
@@ -335,7 +375,7 @@ static int kpd_list(int argc, char **argv)
 
     //Parse TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    kpd_read_target(NULL, &entries, NULL);
 
     //Print
     char *mask = NULL;
@@ -359,7 +399,6 @@ static int kpd_list(int argc, char **argv)
 
     //Cleanup
     if (mask != NULL) free(mask);
-    fclose(file);
     entries_finalize(&entries, true);
     return ERR_OK;
 }
@@ -376,7 +415,7 @@ static int kpd_sort(int argc, char **argv)
 
     //Parse TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    kpd_read_target(NULL, &entries, NULL);
 
     //Print
     entries_sort(&entries);
@@ -396,7 +435,6 @@ static int kpd_sort(int argc, char **argv)
 
     //Cleanup
     free(mask);
-    fclose(file);
     entries_finalize(&entries, true);
     return ERR_OK;
 }
@@ -409,15 +447,14 @@ static int kpd_next(int argc, char **argv)
 
     //Parse TODO.md
     struct EntryBuffer entries = { 0 };
-    FILE *file = kpd_read_target(&entries);
+    kpd_read_target(NULL, &entries, NULL);
 
     //Print
     size_t highest_index;
-    if (!entries_highest(&highest_index, &entries)) printf("Nothing to do\n");
+    if (!entries_highest(&highest_index, &entries, 0)) printf("Nothing to do\n");
     else kpd_print_entry(&entries.p[highest_index], 0, 0);
 
     //Cleanup
-    fclose(file);
     entries_finalize(&entries, true);
     return ERR_OK;
 }
@@ -429,13 +466,10 @@ static int kpd_test(int argc, char **argv)
     if (argc > 0) kpd_error(ERR_USAGE, "too many arguments");
 
     //Parse TODO.md
-    FILE *file = kpd_read_target(NULL);
+    kpd_read_target(NULL, NULL, NULL);
 
     //Print
     printf("All correct\n");
-
-    //Cleanup
-    fclose(file);
     return ERR_OK;
 }
 
@@ -459,7 +493,8 @@ static int kpd_help(int argc, char **argv)
         "                Use 'commit' suffix to:\n"
         "                  1. execute <action> and save TODO.md\n"
         "                  2. stage TODO.md\n"
-        "                  3. call 'git commit' with an automatic (by default) commit message\n"
+        "                  3. call 'git commit' with a commit message\n"
+        "                    (generated from <description> by default)\n"
         "\n"
         "Commands:\n"
         "  init      [<directory>]               Initialize kpd in a directory\n"
@@ -467,7 +502,7 @@ static int kpd_help(int argc, char **argv)
         "\n"
         "  priority  [<number>] [<priority>]     Set task priority\n"
         "  edit      [<number>] [<description>]  Edit or set task description\n"
-        "  commit    [<number>] [<description>]  Perform git commit, see description of <commit>\n"
+        "  commit    [<number>] [<message>]      Perform git commit, see description of <commit>\n"
         "  remove    [<number>] [<commit>]       Remove task\n"
         "  done      [<number>] [<commit>]       Mark task as done\n"
         "  undo      [<number>] [<commit>]       Mark task as not done, defaults to latest done task\n"

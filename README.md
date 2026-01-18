@@ -32,9 +32,10 @@ Placeholders:
                   priority <priority> | edit [<description>]
   <commit>      'commit' suffix. Format: commit [<message>]
                 Use 'commit' suffix to:
-                  1. execute <action> and save TODO.md
+                  1. execute <action> and update TODO.md
                   2. stage TODO.md
-                  3. call 'git commit' with an automatic (by default) commit message
+                  3. call 'git commit' with a commit message
+                    (generated from <description> by default)
 
 Commands:
   init      [<directory>]               Initialize kpd in a directory
@@ -42,7 +43,7 @@ Commands:
 
   priority  [<number>] [<priority>]     Set task priority
   edit      [<number>] [<description>]  Edit or set task description
-  commit    [<number>] [<description>]  Perform git commit, see description of <commit>
+  commit    [<number>] [<message>]      Perform git commit, see description of <commit>
   remove    [<number>] [<commit>]       Remove task
   done      [<number>] [<commit>]       Mark task as done
   undo      [<number>] [<commit>]       Mark task as not done, defaults to latest done task

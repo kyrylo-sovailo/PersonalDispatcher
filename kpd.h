@@ -15,26 +15,32 @@ enum Error
     ERR_OK = 0,
 
     //User error
-    ERR_USAGE,
-    ERR_FORMAT,
+    ERR_USAGE = 10,
+    ERR_FORMAT = 11,
 
     //File operations
-    ERR_SEEK,
-    ERR_TRUNCATE,
-    ERR_TELL,
+    ERR_SEEK = 20,
+    ERR_TRUNCATE = 21,
+    ERR_TELL = 22,
 
     //Filesystem
-    ERR_PATH,
-    ERR_NOT_FOUND,
-    ERR_NOT_FILE,
-    ERR_NOT_DIRECTORY,
+    ERR_PATH = 30,
+    ERR_NOT_FOUND = 31,
+    ERR_NOT_FILE = 32,
+    ERR_NOT_DIRECTORY = 33,
 
     //Memory
-    ERR_MALLOC,
-    ERR_REALLOC,
+    ERR_MALLOC = 40,
+    ERR_REALLOC = 41,
+
+    //Processes
+    ERR_FORK = 50,
+    ERR_EXEC = 51,
+    ERR_WAIT = 52,
+    ERR_GIT = 53,
 
     //Other
-    ERR_NOT_IMPLEMENTED
+    ERR_NOT_IMPLEMENTED = 60
 };
 
 ///Action to be performed on after "find" command
@@ -95,7 +101,7 @@ struct CharBuffer
 ///Prints error message and exits
 void kpd_error(enum Error error, const char *format, ...) __attribute__((noreturn)) __attribute__ ((format (printf, 2, 3)));
 ///Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL)
-void *kpd_read_target(struct EntryBuffer *buffer);
+void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer *path);
 ///Writes entries to the open FILE*
 void kpd_write_target(void *file, const struct EntryBuffer *entries);
 ///Prints entry to stdout (max_length/max_marker_length are zero for no spaces)
@@ -114,14 +120,16 @@ bool kpd_resolve_status(enum Status *status, const char *status_string);
 bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
 ///Returns if string can be resolved as 'commit'
 bool kpd_resolve_commit(const char *commit_string);
+//Executes command
+void kpd_execute(char *const *arguments);
 
 //entries.c
 ///Sets buffer size
 void entries_set_size(struct EntryBuffer *entries, size_t size);
 ///Destroys buffer
 void entries_finalize(struct EntryBuffer *entries, bool free_descriptions);
-///Finds entry with highest priority
-bool entries_highest(size_t *index, const struct EntryBuffer *entries);
+///Finds entry with highest priority (mask can be NULL)
+bool entries_highest(size_t *index, const struct EntryBuffer *entries, const char *mask);
 ///Sorts entries by priority, critical first
 void entries_sort(const struct EntryBuffer *entries);
 
@@ -130,18 +138,26 @@ void entries_sort(const struct EntryBuffer *entries);
 void string_set_size(struct CharBuffer *string, size_t size);
 ///Sets string to line read from file, returns whether read something
 bool string_set_line(struct CharBuffer *string, void *file);
+///Sets string to user input
+void string_set_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt);
 ///Sets string to current working directory
 void string_set_cwd(struct CharBuffer *path);
 ///Destroys buffer
 void string_finalize(struct CharBuffer *string);
+///Substitutes a segment of the string
+void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, size_t substitution_size);
 ///Appends TODO.md to path
 void string_append_file(struct CharBuffer *path);
 ///Removes last file or directory from path
 bool string_remove_file(struct CharBuffer *path);
-///Removes substring from string
-void string_remove(struct CharBuffer *string, size_t begin, size_t size);
 ///Removes trailing and leading spaces from string
 void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces);
+///Transforms description to commit message
+void string_description_to_done_commit(struct CharBuffer *string);
+///Transforms description to commit message
+void string_description_to_undo_commit(struct CharBuffer *string);
+///Transforms description to commit message
+void string_description_to_remove_commit(struct CharBuffer *string);
 ///Resolves string
 bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size);
 
