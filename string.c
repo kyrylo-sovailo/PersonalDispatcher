@@ -1,6 +1,5 @@
 #include "kpd.h"
 
-#include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -11,20 +10,11 @@
     #include <readline/history.h>
 #endif
 
-//Required by string_description_to_done_commit
-static void string_description_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, bool upper)
-{
-    const size_t substitution_size = strlen(substitution);
-    string_substitute(string, segment_begin, segment_size, substitution, substitution_size);
-    if (upper)
-    {
-        char *p = string->p + segment_begin;
-        for (size_t i = 0; i < substitution_size; i++, p++) *p -= ('a' - 'A');
-    }
-}
+#define ascii_isalnum()
 
 //Required by string_set_input
 #ifdef ENABLE_READLINE
+#error "No readline"
 static const char *string_set_input_prefill;
 static int string_set_input_hook(void)
 {
@@ -99,6 +89,7 @@ void string_set_input(struct CharBuffer *string, const char *prompt, const char 
     #else
         printf("%s%s\n", prefill_prompt, prefill);
         printf("%s", prompt);
+        string_set_size(string, INITIAL_BUFFER_SIZE);
         string_set_line(string, stdin);
     #endif
     string_trim(string, 0, 0);
@@ -106,7 +97,7 @@ void string_set_input(struct CharBuffer *string, const char *prompt, const char 
 
 void string_set_cwd(struct CharBuffer *path)
 {
-    string_set_size(path, 8);
+    string_set_size(path, INITIAL_BUFFER_SIZE);
     while (true)
     {
         if (getcwd(path->p, path->capacity) == NULL)
@@ -129,7 +120,7 @@ void string_finalize(struct CharBuffer *string)
 
 void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, size_t substitution_size)
 {
-    char *segment_p = string->p + segment_begin;
+    char *segment_p;
     if (substitution_size != segment_size)
     {
         const size_t new_size = string->size + substitution_size - segment_size;
@@ -138,6 +129,7 @@ void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t s
             //Expanding
             string_set_size(string, new_size);
         }
+        segment_p = string->p + segment_begin;
         memmove(segment_p + substitution_size, segment_p + segment_size, string->size - segment_begin);
         memcpy(segment_p, substitution, substitution_size);
         if (substitution_size < segment_size)
@@ -146,6 +138,10 @@ void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t s
             string->p[new_size] = '\0';
             string->size = new_size;
         }
+    }
+    else
+    {
+        segment_p = string->p + segment_begin;
     }
     memcpy(segment_p, substitution, substitution_size);
 }
@@ -178,6 +174,8 @@ void string_remove(struct CharBuffer *string, size_t begin, size_t size)
 
 void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces)
 {
+    if (string->size == 0) return; //TODO: rewrite the whole module with mem* functions instead of str*
+
     //Count beginning space
     beginning_spaces = strspn(string->p + beginning_spaces, " \t\n\r") + beginning_spaces;
     if (beginning_spaces == string->size)
@@ -205,22 +203,42 @@ void string_description_to_done_commit(struct CharBuffer *string)
 {
     const char *verbs[] =
     {
-        "add", "adjust", "allow", "apply", "archive",
+        "add",
         "build",
-        "change", "check", "clean", "close", "complete", "configure", "create",
-        "debug", "delete", "disable", "document",
-        "enable", "enforce", "enhance",
-        "fix",
+        "change", "check", "clean", "close", "complete",
+        "debug", "delete", "disable", "do", "document",
+        "enable",
+        "find", "fix",
         "handle",
-        "implement", "improve", "initialize", "install",
-        "merge", "migrate",
+        "implement", "improve",
+        "make", "merge", "migrate",
         "optimize",
-        "perform", "prevent",
-        "refactor", "refine", "release", "remove", "replace", "report", "reset", "resolve", "restart", "revert", "review",
-        "save", "send", "start", "stop",
-        "test", "track",
+        "refactor", "remove", "replace", "resolve", "revert", "rewrite",
+        "solve",
+        "test",
         "update", "upgrade",
-        "validate", "verify"
+        "validate",
+        "write"
+    };
+
+    const char *verbs_perfect[] =
+    {
+        "added",
+        "built",
+        "changed", "checked", "cleaned", "closed", "completed",
+        "debugged", "deleted", "disabled", "done", "documented",
+        "enabled",
+        "found", "fixed",
+        "handled",
+        "implemented", "improved",
+        "made", "merged", "migrated",
+        "optimized",
+        "refactored", "removed", "replaced", "resolved", "reverted", "rewrote",
+        "solved",
+        "tested",
+        "updated", "upgraded",
+        "validated",
+        "wrote"
     };
 
     bool changed = false;
@@ -228,40 +246,28 @@ void string_description_to_done_commit(struct CharBuffer *string)
     {
         //Find verb
         const char *verb = verbs[i];
+        const size_t verb_length = strlen(verb);
         char *found = strcasestr(string->p, verb);
         if (found == NULL) continue; //verb not found
-        const size_t verb_length = strlen(verb);
-        if (isalnum(found[verb_length])) continue; //ending with valid character
-        const size_t found_begin = (size_t)(found - string->p);
-        const size_t found_end = found_begin + verb_length;
-
+        const char pre = (found > string->p) ? found[-1] : '\0';
+        const char last = found[verb_length - 1];
+        const char post = found[verb_length];
+        if ((pre >= '0' && pre <= '9') || (pre >= 'A' && pre <= 'Z') || (pre >= 'a' && pre <= 'z')) continue; //beginning with valid character
+        if ((post >= '0' && post <= '9') || (post >= 'A' && post <= 'Z') || (post >= 'a' && post <= 'z')) continue; //ending with valid character
+        
         //Change verb
-        const char o1 = string->p[found_end - 1];
-        const bool upper = o1 >= 'A' && o1 <= 'Z';
-        const char c1 = verb[verb_length - 1];
-        const char c2 = verb[verb_length - 2];
-        if (c1 == 'e') //Archive -> archived
+        const size_t found_begin = (size_t)(found - string->p);
+        const bool upper = last >= 'A' && last <= 'Z';
+        const char *verb_perfect = verbs_perfect[i];
+        const size_t verb_perfect_length = strlen(verb_perfect);
+        size_t verb_match = 0;
+        while (verb[verb_match] == verb_perfect[verb_match]) verb_match++;
+        string_substitute(string, found_begin + verb_match, verb_length - verb_match, verb_perfect + verb_match, verb_perfect_length - verb_match);
+        if (upper)
         {
-            string_description_substitute(string, found_end, 0, "d", upper);
+            found = string->p + found_begin;
+            for (char *p = found + verb_match; p < found + verb_length; p++) *p -= ('a' - 'A');
         }
-        else if (c1 == 'y') //Apply -> Applied
-        {
-            string_description_substitute(string, found_end - 1, 1, "ied", upper);
-        }
-        else if ((c2 == 'l' || c2 == 'n') && (c1 == 'd')) //Build -> built
-        {
-            string_description_substitute(string, found_end - 1, 1, "t", upper);
-        }
-        else if ((c2 == 'a' || c2 == 'e' || c2 == 'i' || c2 == 'o' || c2 == 'y' || c2 == 'u') && (c1 == 'g' || c1 == 'p')) //Debug -> debugged
-        {
-            char dup[4] = { c1, 'e', 'd', '\0' };
-            string_description_substitute(string, found_end, 0, &dup[0], upper);
-        } 
-        else //Adjust -> adjusted
-        {
-            string_description_substitute(string, found_end, 0, "ed", upper);
-        }
-
         changed = true;
     }
 

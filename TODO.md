@@ -3,9 +3,9 @@
  - [X] priority
  - [ ] edit
  - [ ] commit
- - [ ] remove
- - [ ] done
- - [ ] undo
+ - [X] remove
+ - [X] done
+ - [X] undo
  - [X] list
  - [X] sort
  - [X] next

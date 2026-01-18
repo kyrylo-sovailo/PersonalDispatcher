@@ -6,6 +6,7 @@
 
 #define VERSION "0.1.0"
 #define TARGET "TODO.md"
+#define INITIAL_BUFFER_SIZE 127
 
 typedef int (Command)(int argc, char **argv);
 

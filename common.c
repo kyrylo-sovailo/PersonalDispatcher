@@ -175,7 +175,7 @@ void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer 
 
     //Parse TODO.md
     struct CharBuffer line = { 0 };
-    string_set_size(&line, 8);
+    string_set_size(&line, INITIAL_BUFFER_SIZE);
     size_t number = 0;
     while (string_set_line(&line, local_file))
     {
@@ -398,7 +398,10 @@ void kpd_execute(char *const *arguments)
     for (char *const *argument = &arguments[0]; *argument != NULL; argument++)
     {
         const bool next = *(argument + 1) != NULL;
-        printf("%s%c", *argument, next ? ' ' : '\n');
+        const char *quotation = (strchr(*argument, ' ') == NULL) ? "" : (
+            (strchr(*argument, '\"') == NULL) ? "\"" : "\'"
+        );
+        printf("%s%s%s%c", quotation, *argument, quotation, next ? ' ' : '\n');
     }
     return; //Pretend
 

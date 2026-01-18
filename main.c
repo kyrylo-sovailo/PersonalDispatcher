@@ -79,11 +79,11 @@ static int kpd_add(int argc, char **argv)
     entries_set_size(&entries, entry.number + 1);
     entries.p[entry.number] = entry;
 
-    //Write TODO.md
-    kpd_write_target(file, &entries);
-
     //Print
     kpd_print_entry(&entry, 0, 0);
+
+    //Write TODO.md
+    kpd_write_target(file, &entries);
 
     //Cleanup
     fclose(file);
@@ -130,11 +130,11 @@ static int kpd_priority(int argc, char **argv)
         entry->priority_explicit = priority_explicit;
     }
 
-    //Write TODO.md
-    if (changes) kpd_write_target(file, &entries);
-
     //Print
     kpd_print_entries(&entries, mask);
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, &entries);
 
     //Cleanup
     free(mask);
@@ -185,11 +185,11 @@ static int kpd_edit(int argc, char **argv)
         if (entry->description == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
     }
 
-    //Write TODO.md
-    if (changes) kpd_write_target(file, &entries);
-
     //Print
     kpd_print_entries(&entries, mask);
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, &entries);
 
     //Cleanup
     free(mask);
@@ -254,21 +254,6 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : (
         (action != ACT_UNDO) ? kpd_create_mask_highest_open(&entries) : kpd_create_mask_last_closed(&entries)
     );
-    if (commit_suffix && commit_message.p == NULL)
-    {
-        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
-        struct CharBuffer suggestion = { 0 };
-        string_substitute(&suggestion, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
-        if (action == ACT_DONE) string_description_to_done_commit(&suggestion);
-        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggestion);
-        else string_description_to_remove_commit(&suggestion);
-        const char *prompt         = "Suggested commit message        : ";
-        const char *prefill_prompt = "Commit message (Enter to accept): ";
-        string_set_input(&commit_message, prompt, suggestion.p, prefill_prompt);
-        if (commit_message.size == 0) { string_finalize(&commit_message); commit_message = suggestion; }
-        else string_finalize(&suggestion);
-    }
-
     bool changes = false;
     struct EntryBuffer entries_copy = { 0 };
     struct EntryBuffer *entries_written = &entries;
@@ -298,11 +283,27 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
         }
     }
 
-    //Write TODO.md
-    if (changes) kpd_write_target(file, entries_written);
-
     //Print
     kpd_print_entries(&entries, mask);
+
+    //Ask user
+    if (commit_suffix && commit_message.p == NULL)
+    {
+        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
+        struct CharBuffer suggestion = { 0 };
+        string_substitute(&suggestion, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
+        if (action == ACT_DONE) string_description_to_done_commit(&suggestion);
+        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggestion);
+        else string_description_to_remove_commit(&suggestion);
+        const char *prompt         = "Suggested commit message        : ";
+        const char *prefill_prompt = "Commit message (Enter to accept): ";
+        string_set_input(&commit_message, prompt, suggestion.p, prefill_prompt);
+        if (commit_message.size == 0) { string_finalize(&commit_message); commit_message = suggestion; }
+        else string_finalize(&suggestion);
+    }
+
+    //Write TODO.md
+    if (changes) kpd_write_target(file, entries_written);
 
     //Commit
     if (commit_suffix)

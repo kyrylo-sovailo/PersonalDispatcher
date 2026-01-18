@@ -37,7 +37,7 @@ bool entries_highest_open(size_t *index, const struct EntryBuffer *entries)
     const struct Entry *highest = NULL;
     for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
     {
-        if (highest == NULL || entry->priority > highest->priority) highest = entry;
+        if (!entry->done && (highest == NULL || entry->priority > highest->priority)) highest = entry;
     }
     if (highest == NULL)
     {
