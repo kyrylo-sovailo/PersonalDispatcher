@@ -321,21 +321,41 @@ bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
     return true;
 }
 
-char *kpd_create_mask(const char *number_string, const struct EntryBuffer *entries)
+char *kpd_create_mask(size_t mask_size, const char *number_string)
+{
+    char *mask = malloc(mask_size);
+    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    kpd_parse_number(mask, mask_size, number_string);
+    return mask;
+}
+
+char *kpd_create_mask_highest_open(const struct EntryBuffer *entries)
 {
     char *mask = malloc(entries->size);
     if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
-    if (number_string == NULL)
+    size_t highest;
+    if (!entries_highest_open(&highest, entries)) kpd_error(ERR_USAGE, "no entries");
+    memset(mask, '\0', entries->size);
+    mask[highest] = '\1';
+    return mask;
+}
+
+char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
+{
+    char *mask = malloc(entries->size);
+    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    const struct Entry *last = NULL;
+    for (const struct Entry *entry = entries->p + entries->size; entry-- > entries->p;)
     {
-        size_t highest;
-        if (!entries_highest(&highest, entries, NULL)) kpd_error(ERR_USAGE, "no entries");
-        memset(mask, '\0', entries->size);
-        mask[highest] = '\1';
+        if (!entry->done)
+        {
+            last = entry;
+            break;
+        }
     }
-    else
-    {
-        kpd_parse_number(mask, entries->size, number_string);
-    }
+    if (last == NULL) kpd_error(ERR_USAGE, "no entries");
+    memset(mask, '\0', entries->size);
+    mask[last - entries->p] = '\1';
     return mask;
 }
 

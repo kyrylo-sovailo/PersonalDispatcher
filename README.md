@@ -46,7 +46,7 @@ Commands:
   commit    [<number>] [<message>]      Perform git commit, see description of <commit>
   remove    [<number>] [<commit>]       Remove task
   done      [<number>] [<commit>]       Mark task as done
-  undo      [<number>] [<commit>]       Mark task as not done, defaults to latest done task
+  undo      [<number>] [<commit>]       Mark task as not done, defaults to last done task
 
   list      [<status>] [<priority>]     List entries
   sort      [<status>]                  List entries sorted by priority (default command)

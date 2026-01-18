@@ -110,8 +110,12 @@ void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigne
 void kpd_print_entries(const struct EntryBuffer *entries, const char *mask);
 ///Parses number and sets mask (if mask is NULL, only checks format)
 bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string);
-///Sets mask based on parsed number (number_string is non-NULL) or based on highest priority (number_string is NULL)
-char *kpd_create_mask(const char *number_string, const struct EntryBuffer *entries);
+///Sets mask based on parsed number
+char *kpd_create_mask(size_t mask_size, const char *number_string);
+///Sets mask based on open entry with highest priority
+char *kpd_create_mask_highest_open(const struct EntryBuffer *entries);
+///Sets mask based on last done entry
+char *kpd_create_mask_last_closed(const struct EntryBuffer *entries);
 ///Parses action string (if action is NULL, only checks)
 bool kpd_resolve_action(enum Action *action, const char *action_string);
 ///Parses status string (if status is NULL, only checks)
@@ -128,8 +132,8 @@ void kpd_execute(char *const *arguments);
 void entries_set_size(struct EntryBuffer *entries, size_t size);
 ///Destroys buffer
 void entries_finalize(struct EntryBuffer *entries, bool free_descriptions);
-///Finds entry with highest priority (mask can be NULL)
-bool entries_highest(size_t *index, const struct EntryBuffer *entries, const char *mask);
+///Finds open entry with highest priority
+bool entries_highest_open(size_t *index, const struct EntryBuffer *entries);
 ///Sorts entries by priority, critical first
 void entries_sort(const struct EntryBuffer *entries);
 

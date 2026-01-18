@@ -118,7 +118,7 @@ static int kpd_priority(int argc, char **argv)
     kpd_read_target(&file, &entries, NULL);
 
     //Modify TODO.md
-    char *mask = kpd_create_mask(number_string, &entries);
+    char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     const char *mask_i = mask;
     bool changes = false;
     for (struct Entry *entry = entries.p; entry < entries.p + entries.size; entry++, mask_i++)
@@ -167,7 +167,7 @@ static int kpd_edit(int argc, char **argv)
     kpd_read_target(&file, &entries, NULL);
 
     //Modify TODO.md
-    char *mask = kpd_create_mask(number_string, &entries);
+    char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     if (description.p == NULL)
     {
         printf("Enter new description: ");
@@ -251,11 +251,12 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     kpd_read_target(&file, &entries, &path);
 
     //Modify TODO.md
-    char *mask = kpd_create_mask(number_string, &entries);
+    char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : (
+        (action != ACT_UNDO) ? kpd_create_mask_highest_open(&entries) : kpd_create_mask_last_closed(&entries)
+    );
     if (commit_suffix && commit_message.p == NULL)
     {
-        size_t index;
-        entries_highest(&index, &entries, mask); //guaranteed because if mask was empty, parsing would have failed
+        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
         struct CharBuffer suggestion = { 0 };
         string_substitute(&suggestion, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
         if (action == ACT_DONE) string_description_to_done_commit(&suggestion);
@@ -451,7 +452,7 @@ static int kpd_next(int argc, char **argv)
 
     //Print
     size_t highest_index;
-    if (!entries_highest(&highest_index, &entries, 0)) printf("Nothing to do\n");
+    if (!entries_highest_open(&highest_index, &entries)) printf("Nothing to do\n");
     else kpd_print_entry(&entries.p[highest_index], 0, 0);
 
     //Cleanup
@@ -505,7 +506,7 @@ static int kpd_help(int argc, char **argv)
         "  commit    [<number>] [<message>]      Perform git commit, see description of <commit>\n"
         "  remove    [<number>] [<commit>]       Remove task\n"
         "  done      [<number>] [<commit>]       Mark task as done\n"
-        "  undo      [<number>] [<commit>]       Mark task as not done, defaults to latest done task\n"
+        "  undo      [<number>] [<commit>]       Mark task as not done, defaults to last done task\n"
         "\n"
         "  list      [<status>] [<priority>]     List entries\n"
         "  sort      [<status>]                  List entries sorted by priority (default command)\n"
