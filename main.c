@@ -207,9 +207,55 @@ static int kpd_edit(int argc, char **argv)
 
 static int kpd_commit(int argc, char **argv)
 {
-    (void)argc;
-    (void)argv;
-    kpd_error(ERR_NOT_IMPLEMENTED, "not implemented");
+    //Parse options
+    const char *number_string = NULL;
+    struct CharBuffer commit_message = { 0 };
+    if (argc > 2) kpd_error(ERR_USAGE, "too many arguments");
+    if (argc == 1)
+    {
+        if (kpd_parse_number(NULL, 0, argv[0])) number_string = argv[0];
+        else commit_message.p = argv[0];
+    }
+    else if (argc == 2)
+    {
+        if (!kpd_parse_number(NULL, 0, argv[0])) kpd_error(ERR_USAGE, "'%s' is not a valid number", argv[1]);
+        number_string = argv[0];
+        commit_message.p = argv[1];
+    }
+
+    //Read TODO.md
+    struct EntryBuffer entries = { 0 };
+    struct CharBuffer path;
+    kpd_read_target(NULL, &entries, &path);
+
+    //Print
+    char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
+    kpd_print_entries(&entries, mask);
+
+    //Ask user
+    if (commit_message.p == NULL)
+    {
+        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
+        struct CharBuffer suggested_message = { 0 };
+        string_substitute(&suggested_message, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
+        string_description_to_done_commit(&suggested_message);
+        const char *prompt         = "Commit message (Enter to accept): ";
+        const char *prefill_prompt = "Suggested commit message        : ";
+        string_set_input(&commit_message, prompt, suggested_message.p, prefill_prompt);
+        #ifndef ENABLE_READLINE
+        if (commit_message.size == 0) { struct CharBuffer b = suggested_message; suggested_message = commit_message; commit_message = b; }
+        #endif
+        string_finalize(&suggested_message);
+    }
+
+    //Commit
+    kpd_invoke_git(path.p, commit_message.p);
+
+    //Cleanup
+    free(mask);
+    string_finalize(&path);
+    entries_finalize(&entries, true);
+    if (commit_message.capacity != 0) string_finalize(&commit_message);
     return ERR_OK;
 }
 
@@ -311,25 +357,10 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     }
 
     //Write TODO.md
-    if (changes) kpd_write_target(file, entries_written);
+    if (changes) { kpd_write_target(file, entries_written); fflush(file); }
 
     //Commit
-    if (commit_suffix)
-    {
-        char *arguments[5];
-        arguments[0] = "git";
-        arguments[1] = "add";
-        arguments[2] = path.p;
-        arguments[3] = NULL;
-        kpd_execute(arguments);
-
-        arguments[0] = "git";
-        arguments[1] = "commit";
-        arguments[2] = "-m";
-        arguments[3] = commit_message.p;
-        arguments[4] = NULL;
-        kpd_execute(arguments);
-    }
+    if (commit_suffix) kpd_invoke_git(path.p, commit_message.p);
 
     //Cleanup
     free(mask);

@@ -146,6 +146,35 @@ static bool kpd_parse_number_post_hyphen(const char **current_string, char *mask
     }
 }
 
+//Needed by kpd_invoke_git
+static void kpd_invoke(char *const *arguments)
+{
+    for (char *const *argument = &arguments[0]; *argument != NULL; argument++)
+    {
+        const bool next = *(argument + 1) != NULL;
+        const char *quotation = (strchr(*argument, ' ') == NULL) ? "" : (
+            (strchr(*argument, '\"') == NULL) ? "\"" : "\'"
+        );
+        printf("%s%s%s%c", quotation, *argument, quotation, next ? ' ' : '\n');
+    }
+
+    const int id = vfork();
+    if (id < 0)
+    {
+        kpd_error(ERR_FORK, "vfork() failed");
+    }
+    else if (id == 0)
+    {
+        if (execvp(arguments[0], arguments) < 0) kpd_error(ERR_EXEC, "execvp() failed");
+    }
+    else
+    {
+        int status;
+        if (waitpid(id, &status, 0) < 0) kpd_error(ERR_WAIT, "waitpid() failed");
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) kpd_error(ERR_GIT, "'%s' failed", arguments[0]);
+    }
+}
+
 void kpd_error(enum Error error, const char *format, ...)
 {
     va_list va;
@@ -410,30 +439,23 @@ bool kpd_resolve_commit(const char *commit_string)
     return commit_length <= only_option_length && memcmp(commit_string, "commit", commit_length) == 0;
 }
 
-void kpd_execute(char *const *arguments)
+void kpd_invoke_git(const char *path, const char *commit_message)
 {
-    for (char *const *argument = &arguments[0]; *argument != NULL; argument++)
-    {
-        const bool next = *(argument + 1) != NULL;
-        const char *quotation = (strchr(*argument, ' ') == NULL) ? "" : (
-            (strchr(*argument, '\"') == NULL) ? "\"" : "\'"
-        );
-        printf("%s%s%s%c", quotation, *argument, quotation, next ? ' ' : '\n');
-    }
+    char *arguments[5];
+    arguments[0] = "git";
+    arguments[1] = "add";
+    arguments[2] = strdup(path);
+    arguments[3] = NULL;
+    if (arguments[2] == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
+    kpd_invoke(arguments);
+    free(arguments[2]);
 
-    const int id = vfork();
-    if (id < 0)
-    {
-        kpd_error(ERR_FORK, "vfork() failed");
-    }
-    else if (id == 0)
-    {
-        if (execvp(arguments[0], arguments) < 0) kpd_error(ERR_EXEC, "execvp() failed");
-    }
-    else
-    {
-        int status;
-        if (waitpid(id, &status, 0) < 0) kpd_error(ERR_WAIT, "waitpid() failed");
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) kpd_error(ERR_GIT, "'%s' failed", arguments[0]);
-    }
+    arguments[0] = "git";
+    arguments[1] = "commit";
+    arguments[2] = "-m";
+    arguments[3] = strdup(commit_message);
+    arguments[4] = NULL;
+    if (arguments[3] == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
+    kpd_invoke(arguments);
+    free(arguments[3]);
 }

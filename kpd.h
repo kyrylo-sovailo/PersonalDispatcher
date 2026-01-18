@@ -125,8 +125,8 @@ bool kpd_resolve_status(enum Status *status, const char *status_string);
 bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
 ///Returns if string can be resolved as 'commit'
 bool kpd_resolve_commit(const char *commit_string);
-//Executes command
-void kpd_execute(char *const *arguments);
+///Invokes git
+void kpd_invoke_git(const char *path, const char *commit_message);
 
 //entries.c
 ///Sets buffer size
