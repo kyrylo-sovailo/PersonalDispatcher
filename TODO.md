@@ -1,7 +1,7 @@
  - [X] init
  - [X] add
  - [X] priority
- - [ ] edit
+ - [X] edit
  - [ ] commit
  - [X] remove
  - [X] done
