@@ -54,7 +54,9 @@ static int entries_compare(const void *a, const void *b)
 {
     const struct Entry *ac = a;
     const struct Entry *bc = b;
-    int difference = (int)(bc->priority) - (int)(ac->priority);
+    int difference = (bc->done ? 0 : 1) - (ac->done ? 0 : 1);
+    if (difference != 0) return difference;
+    difference = (int)(bc->priority) - (int)(ac->priority);
     if (difference != 0) return difference;
     difference = (int)(ac->number) - (int)(bc->number);
     return difference;

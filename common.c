@@ -160,6 +160,7 @@ void kpd_error(enum Error error, const char *format, ...)
 void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer *path)
 {
     //Search for TODO.md
+    size_t step = 0;
     struct CharBuffer local_path = { 0 };
     string_set_cwd(&local_path);
     string_append_file(&local_path);
@@ -171,6 +172,7 @@ void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer 
         if (!string_remove_file(&local_path) || !string_remove_file(&local_path))
             kpd_error(ERR_USAGE, "current_string directory does not contain " TARGET);
         string_append_file(&local_path);
+        step++;
     }
 
     //Parse TODO.md
@@ -193,6 +195,21 @@ void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer 
             entries->p[number] = entry;
         }
         number++;
+    }
+
+    //Make relative path
+    if (path != NULL)
+    {
+        string_set_size(&local_path, 0);
+        if (step == 0)
+        {
+            string_substitute(&local_path, 0, 0, TARGET, strlen(TARGET));
+        }
+        else
+        {
+            for (size_t i = 0; i < step; i++) string_substitute(&local_path, local_path.size, 0, "../", 3);
+            string_append_file(&local_path);
+        }
     }
 
     //Cleanup

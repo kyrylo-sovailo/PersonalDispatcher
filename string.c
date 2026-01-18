@@ -123,14 +123,15 @@ void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t s
     char *segment_p;
     if (substitution_size != segment_size)
     {
-        const size_t new_size = string->size + substitution_size - segment_size;
+        const size_t old_size = string->size;
+        const size_t new_size = old_size + substitution_size - segment_size;
         if (substitution_size > segment_size)
         {
             //Expanding
             string_set_size(string, new_size);
         }
         segment_p = string->p + segment_begin;
-        memmove(segment_p + substitution_size, segment_p + segment_size, string->size - segment_begin);
+        memmove(segment_p + substitution_size, segment_p + segment_size, old_size - segment_begin);
         memcpy(segment_p, substitution, substitution_size);
         if (substitution_size < segment_size)
         {
