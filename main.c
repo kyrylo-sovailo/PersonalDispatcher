@@ -73,7 +73,7 @@ static int kpd_add(int argc, char **argv)
     FILE *file;
     kpd_read_target(&file, &entries, NULL);
 
-    //Modify TODO.md
+    //Modify entries
     entry.number = entries.size;
     entry.done = false;
     entries_set_size(&entries, entry.number + 1);
@@ -117,7 +117,7 @@ static int kpd_priority(int argc, char **argv)
     FILE *file;
     kpd_read_target(&file, &entries, NULL);
 
-    //Modify TODO.md
+    //Modify entries
     char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     const char *mask_i = mask;
     bool changes = false;
@@ -166,13 +166,18 @@ static int kpd_edit(int argc, char **argv)
     FILE *file;
     kpd_read_target(&file, &entries, NULL);
 
-    //Modify TODO.md
+    //Modify entries
     char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     if (description.p == NULL)
     {
-        printf("Enter new description: ");
-        string_set_line(&description, stdin);
-        string_trim(&description, 0, 0);
+        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
+        const char *old_description = entries.p[index].description;
+        const char *prompt         = "New description (Enter to accept): ";
+        const char *prefill_prompt = "Old description                  : ";
+        string_set_input(&description, prompt, old_description, prefill_prompt);
+        #ifndef ENABLE_READLINE
+        if (description.size == 0) goto exit; //user pressed enter, what else are we supposed to do?
+        #endif
     }
     const char *mask_i = mask;
     bool changes = false;
@@ -192,6 +197,7 @@ static int kpd_edit(int argc, char **argv)
     if (changes) kpd_write_target(file, &entries);
 
     //Cleanup
+    exit:
     free(mask);
     fclose(file);
     entries_finalize(&entries, true);
@@ -250,7 +256,7 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     struct CharBuffer path;
     kpd_read_target(&file, &entries, &path);
 
-    //Modify TODO.md
+    //Modify entries
     char *mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : (
         (action != ACT_UNDO) ? kpd_create_mask_highest_open(&entries) : kpd_create_mask_last_closed(&entries)
     );
@@ -290,16 +296,18 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     if (commit_suffix && commit_message.p == NULL)
     {
         const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
-        struct CharBuffer suggestion = { 0 };
-        string_substitute(&suggestion, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
-        if (action == ACT_DONE) string_description_to_done_commit(&suggestion);
-        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggestion);
-        else string_description_to_remove_commit(&suggestion);
-        const char *prompt         = "Suggested commit message        : ";
-        const char *prefill_prompt = "Commit message (Enter to accept): ";
-        string_set_input(&commit_message, prompt, suggestion.p, prefill_prompt);
-        if (commit_message.size == 0) { string_finalize(&commit_message); commit_message = suggestion; }
-        else string_finalize(&suggestion);
+        struct CharBuffer suggested_message = { 0 };
+        string_substitute(&suggested_message, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
+        if (action == ACT_DONE) string_description_to_done_commit(&suggested_message);
+        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggested_message);
+        else string_description_to_remove_commit(&suggested_message);
+        const char *prompt         = "Commit message (Enter to accept): ";
+        const char *prefill_prompt = "Suggested commit message        : ";
+        string_set_input(&commit_message, prompt, suggested_message.p, prefill_prompt);
+        #ifndef ENABLE_READLINE
+        if (commit_message.size == 0) { struct CharBuffer b = suggested_message; suggested_message = commit_message; commit_message = b; }
+        #endif
+        string_finalize(&suggested_message);
     }
 
     //Write TODO.md

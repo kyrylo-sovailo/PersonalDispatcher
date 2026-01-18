@@ -420,7 +420,6 @@ void kpd_execute(char *const *arguments)
         );
         printf("%s%s%s%c", quotation, *argument, quotation, next ? ' ' : '\n');
     }
-    return; //Pretend
 
     const int id = vfork();
     if (id < 0)
