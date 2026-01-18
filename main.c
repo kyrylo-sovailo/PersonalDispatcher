@@ -205,6 +205,23 @@ static int kpd_edit(int argc, char **argv)
     return ERR_OK;
 }
 
+static void kpd_commit_dialog(const struct EntryBuffer *entries, const char *mask, struct CharBuffer *commit_message, enum Action style)
+{
+    const size_t index = (size_t)((char*)memchr(mask, '\1', entries->size) - mask); //guaranteed because if mask was empty, parsing would have failed
+    struct CharBuffer suggested_message = { 0 };
+    string_substitute(&suggested_message, 0, 0, entries->p[index].description, strlen(entries->p[index].description));
+    if (style == ACT_DONE) string_description_to_done_commit(&suggested_message);
+    else if (style == ACT_UNDO) string_description_to_undo_commit(&suggested_message);
+    else if (style == ACT_REMOVE) string_description_to_remove_commit(&suggested_message);
+    const char *prompt         = "Commit message (Enter to accept): ";
+    const char *prefill_prompt = "Suggested commit message        : ";
+    string_set_input(commit_message, prompt, suggested_message.p, prefill_prompt);
+    #ifndef ENABLE_READLINE
+    if (commit_message->size == 0) { struct CharBuffer b = suggested_message; suggested_message = *commit_message; *commit_message = b; }
+    #endif
+    string_finalize(&suggested_message);
+}
+
 static int kpd_commit(int argc, char **argv)
 {
     //Parse options
@@ -233,20 +250,7 @@ static int kpd_commit(int argc, char **argv)
     kpd_print_entries(&entries, mask);
 
     //Ask user
-    if (commit_message.p == NULL)
-    {
-        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
-        struct CharBuffer suggested_message = { 0 };
-        string_substitute(&suggested_message, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
-        string_description_to_done_commit(&suggested_message);
-        const char *prompt         = "Commit message (Enter to accept): ";
-        const char *prefill_prompt = "Suggested commit message        : ";
-        string_set_input(&commit_message, prompt, suggested_message.p, prefill_prompt);
-        #ifndef ENABLE_READLINE
-        if (commit_message.size == 0) { struct CharBuffer b = suggested_message; suggested_message = commit_message; commit_message = b; }
-        #endif
-        string_finalize(&suggested_message);
-    }
+    if (commit_message.p == NULL) kpd_commit_dialog(&entries, mask, &commit_message, ACT_DONE);
 
     //Commit
     kpd_invoke_git(path.p, commit_message.p);
@@ -339,22 +343,7 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     kpd_print_entries(&entries, mask);
 
     //Ask user
-    if (commit_suffix && commit_message.p == NULL)
-    {
-        const size_t index = (size_t)((char*)memchr(mask, '\1', entries.size) - mask); //guaranteed because if mask was empty, parsing would have failed
-        struct CharBuffer suggested_message = { 0 };
-        string_substitute(&suggested_message, 0, 0, entries.p[index].description, strlen(entries.p[index].description));
-        if (action == ACT_DONE) string_description_to_done_commit(&suggested_message);
-        else if (action == ACT_UNDO) string_description_to_undo_commit(&suggested_message);
-        else string_description_to_remove_commit(&suggested_message);
-        const char *prompt         = "Commit message (Enter to accept): ";
-        const char *prefill_prompt = "Suggested commit message        : ";
-        string_set_input(&commit_message, prompt, suggested_message.p, prefill_prompt);
-        #ifndef ENABLE_READLINE
-        if (commit_message.size == 0) { struct CharBuffer b = suggested_message; suggested_message = commit_message; commit_message = b; }
-        #endif
-        string_finalize(&suggested_message);
-    }
+    if (commit_suffix && commit_message.p == NULL) kpd_commit_dialog(&entries, mask, &commit_message, action);
 
     //Write TODO.md
     if (changes) { kpd_write_target(file, entries_written); fflush(file); }

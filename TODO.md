@@ -2,7 +2,7 @@
  - [X] add
  - [X] priority
  - [X] edit
- - [ ] commit
+ - [X] commit
  - [X] remove
  - [X] done
  - [X] undo
