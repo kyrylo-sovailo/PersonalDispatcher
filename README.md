@@ -2,19 +2,19 @@
 
 An utility to manage TODO.md. There are many like it, but this one is mine.
 
-The main feature of KPD is that TODO.md searches for TODO.md in the current directory and its parents (in contrast to taskwarrior and todo.txt). It makes it friendly to git and cmake.
+The main feature of KPD is that KPD searches for TODO.md in the current directory and its parents (in contrast to taskwarrior and todo.txt). It makes it friendly to git and cmake.
 
 ### Build
 
 ```
 mkdir build
 cd build
-cmake ..
+cmake .. # -DENABLE_READLINE=true
 cmake --build .
 ./kpd
 ```
 
-KPD requires GNU readline.
+KPD optionally requires GNU readline for more convenient string editing.
 
 ### Usage
 
@@ -29,7 +29,7 @@ Placeholders:
   <description> Description of the task
   <action>      Action to be performed on found entries, one of:
                   <commit> | remove <commit> | done <commit> | undo <commit> |
-                  priority <priority> | edit [<description>]
+                  priority [<priority>]      | edit [<description>]
   <commit>      'commit' suffix. Format: commit [<message>]
                 Use 'commit' suffix to:
                   1. execute <action> and update TODO.md

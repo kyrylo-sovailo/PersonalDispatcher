@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-//Needed by kpd_print_entry
+/* Needed by kpd_print_entry */
 #define BLACK           "\x1b[00;30m"
 #define RED             "\x1b[00;31m"
 #define GREEN           "\x1b[00;32m"
@@ -30,13 +30,16 @@
 #define BRIGHT_WHITE    "\x1b[01;37m"
 #define DEFAULT         "\x1b[0m"
 
-//Needed by kpd_read_target
+/* Needed by kpd_read_target */
 static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
 {
-    //Empty lines
+    const char *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
+    enum Priority priority_i;
+
+    /* Empty lines */
     if (strspn(line->p, " \t\n\r") == line->size) return false;
 
-    //Parse beginning
+    /* Parse beginning */
     if (line->size < 7
     || line->p[0] != ' '
     || line->p[1] != '-'
@@ -47,40 +50,43 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     || line->p[6] != ' ') kpd_error(ERR_FORMAT, "invalid line '%s'", line->p);
     entry->done = line->p[4] == 'X';
     
-    //Parse priority
+    /* Parse priority */
     entry->priority = PRI_MEDIUM;
     entry->priority_explicit = false;
-    const char *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
-    for (enum Priority priority = 0; priority < 4; priority++)
+    for (priority_i = 0; priority_i < 4; priority_i++)
     {
-        char *marker_found = strstr(line->p, markers[priority]);
+        char *marker_found = strstr(line->p, markers[priority_i]);
         if (marker_found != NULL)
         {
-            //Remove marker
-            entry->priority = priority;
+            /* Remove marker */
+            entry->priority = priority_i;
             entry->priority_explicit = true;
-            string_substitute(line, (size_t)(marker_found - line->p), strlen(markers[priority]), "", 0);
+            string_substitute(line, (size_t)(marker_found - line->p), strlen(markers[priority_i]), "", 0);
             break;
         }
     }
 
-    //Allocate
-    string_trim(line, 7, 0); //Not really efficient
+    /* Allocate */
+    memset(line->p, ' ', 7);
+    string_trim(line); /* Not really efficient because requires one more memcpy*/
     entry->description = malloc(line->size + 1);
     if (entry->description == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
     memcpy(entry->description, line->p, line->size + 1);
     return true;
 }
 
-//Needed by kpd_print_entry
+/* Needed by kpd_print_entry */
 static unsigned int get_number_length(size_t number)
 {
     const unsigned int max_length = (unsigned int)floor(log10((double)SIZE_MAX)) + 1;
-    size_t accumulator = 1;
-    for (unsigned int i = 0; i < max_length-1; i++)
+    unsigned int length_i;
+    size_t accumulator;
+
+    accumulator = 1;
+    for (length_i = 0; length_i < max_length-1; length_i++)
     {
         accumulator *= 10;
-        if (number < accumulator) return i + 1;
+        if (number < accumulator) return length_i + 1;
     }
     return max_length;
 }
@@ -89,16 +95,16 @@ static unsigned int get_marker_length(bool done, enum Priority priority)
 {
     const unsigned int marker_lengths[4] =
     {
-        strlen("(low)"),
-        strlen("(medium)"),
-        strlen("(high)"),
-        strlen("(critical)")
+        sizeof("(low)")-1,
+        sizeof("(medium)")-1,
+        sizeof("(high)")-1,
+        sizeof("(critical)")-1
     };
 
-    return done ? strlen("(done)") : marker_lengths[priority];
+    return done ? (sizeof("(done)")-1) : marker_lengths[priority];
 }
 
-//Needed by kpd_parse_number
+/* Needed by kpd_parse_number */
 static bool kpd_parse_number_post_number(const char **current_string)
 {
     switch (**current_string)
@@ -108,7 +114,7 @@ static bool kpd_parse_number_post_number(const char **current_string)
 
     case ',':
         (*current_string)++;
-        if (**current_string == '\0') return false; //Comma at the end is not allowed
+        if (**current_string == '\0') return false; /* Comma at the end is not allowed */
         return true;
         
     default:
@@ -118,24 +124,26 @@ static bool kpd_parse_number_post_number(const char **current_string)
 
 static bool kpd_parse_number_post_hyphen(const char **current_string, char *mask, size_t mask_size, bool begin_read, size_t begin)
 {
-    //Try to read number
+    size_t end;
     char *next_string;
-    size_t end = strtoul(*current_string, &next_string, 10);
+
+    /* Try to read number */
+    end = strtoul(*current_string, &next_string, 10);
     if (next_string == *current_string && !begin_read)
     {
-        //No number read and 'begin' was not yet read
+        /* No number read and 'begin' was not yet read */
         return false;
     }
     else
     {
         if (next_string == *current_string)
         {
-            //No number read
+            /* No number read */
             end = mask_size;
         }
         else
         {
-            //Number read
+            /* Number read */
             *current_string = next_string;
             if (begin_read && begin > end) return false;
             if (mask != NULL && (end == 0 || end > mask_size))
@@ -146,19 +154,22 @@ static bool kpd_parse_number_post_hyphen(const char **current_string, char *mask
     }
 }
 
-//Needed by kpd_invoke_git
+/* Needed by kpd_invoke_git */
 static void kpd_invoke(char *const *arguments)
 {
-    for (char *const *argument = &arguments[0]; *argument != NULL; argument++)
+    char *const *argument_i;
+    int id;
+
+    for (argument_i = &arguments[0]; *argument_i != NULL; argument_i++)
     {
-        const bool next = *(argument + 1) != NULL;
-        const char *quotation = (strchr(*argument, ' ') == NULL) ? "" : (
-            (strchr(*argument, '\"') == NULL) ? "\"" : "\'"
+        const bool next = *(argument_i + 1) != NULL;
+        const char *quotation = (strchr(*argument_i, ' ') == NULL) ? "" : (
+            (strchr(*argument_i, '\"') == NULL) ? "\"" : "\'"
         );
-        printf("%s%s%s%c", quotation, *argument, quotation, next ? ' ' : '\n');
+        printf("%s%s%s%c", quotation, *argument_i, quotation, next ? ' ' : '\n');
     }
 
-    const int id = vfork();
+    id = fork();
     if (id < 0)
     {
         kpd_error(ERR_FORK, "vfork() failed");
@@ -178,6 +189,7 @@ static void kpd_invoke(char *const *arguments)
 void kpd_error(enum Error error, const char *format, ...)
 {
     va_list va;
+
     va_start(va, format);
     fprintf(stderr, "kpd: ");
     vfprintf(stderr, format, va);
@@ -186,33 +198,33 @@ void kpd_error(enum Error error, const char *format, ...)
     exit((int)error);
 }
 
-void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer *path)
+void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
 {
-    //Search for TODO.md
-    size_t step = 0;
-    struct CharBuffer local_path = { 0 };
+    struct CharBuffer local_path = { 0 }, line = { 0 };
+    size_t steps, entry_number;
+    FILE *file;
+
+    /* Search for TODO.md */
     string_set_cwd(&local_path);
     string_append_file(&local_path);
-    FILE *local_file = NULL;
+    steps = 0;
     while (true)
     {
-        local_file = fopen(local_path.p, "r+");
-        if (local_file != NULL) break;
+        file = fopen(local_path.p, "r+");
+        if (file != NULL) break;
         if (!string_remove_file(&local_path) || !string_remove_file(&local_path))
             kpd_error(ERR_USAGE, "current_string directory does not contain " TARGET);
         string_append_file(&local_path);
-        step++;
+        steps++;
     }
 
-    //Parse TODO.md
-    struct CharBuffer line = { 0 };
+    /* Parse TODO.md */
     string_set_size(&line, INITIAL_BUFFER_SIZE);
-    size_t number = 0;
-    while (string_set_line(&line, local_file))
+    entry_number = 0;
+    while (string_set_line(&line, file))
     {
-        
         struct Entry entry = { 0 };
-        entry.number = number;
+        entry.number = entry_number;
         if (!kpd_read_line(&entry, &line)) continue;
         if (entries == NULL)
         {
@@ -220,51 +232,51 @@ void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer 
         }
         else
         {
-            entries_set_size(entries, number + 1);
-            entries->p[number] = entry;
+            entries_set_size(entries, entry_number + 1);
+            entries->p[entry_number] = entry;
         }
-        number++;
+        entry_number++;
     }
 
-    //Make relative path
+    /* Make relative path */
     if (path != NULL)
     {
         string_set_size(&local_path, 0);
-        if (step == 0)
+        if (steps == 0)
         {
             string_substitute(&local_path, 0, 0, TARGET, strlen(TARGET));
         }
         else
         {
-            for (size_t i = 0; i < step; i++) string_substitute(&local_path, local_path.size, 0, "../", 3);
+            size_t step_i;
+            for (step_i = 0; step_i < steps; step_i++) string_substitute(&local_path, local_path.size, 0, "../", 3);
             string_append_file(&local_path);
         }
     }
 
-    //Cleanup
+    /* Cleanup */
     string_finalize(&line);
-    if (file == NULL) fclose(local_file);
-    else *((FILE**)file) = local_file;
+    fclose(file);
     if (path == NULL) string_finalize(&local_path);
     else *path = local_path;
 }
 
-void kpd_write_target(void *file, const struct EntryBuffer *entries)
+void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer *path)
 {
-    const int seek_result = fseek(file, 0, SEEK_SET);
-    if (seek_result < 0) kpd_error(ERR_SEEK, "fseek() failed");
+    FILE *file;
+    struct Entry *entry_i;
 
-    for (struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
+    file = fopen(path->p, "w");
+    if (file == NULL) kpd_error(ERR_FILE_OPEN, "fopen() failed");
+
+    for (entry_i = entries->p; entry_i < entries->p + entries->size; entry_i++)
     {
         const char *markers[4] = { " (priority: low)", " (priority: medium)", " (priority: high)", " (priority: critical)" };
-        const char *marker = entry->priority_explicit ? markers[entry->priority] : "";
-        fprintf(file, " - [%c] %s%s\n", entry->done ? 'X' : ' ', entry->description, marker);
+        const char *marker = entry_i->priority_explicit ? markers[entry_i->priority] : "";
+        fprintf(file, " - [%c] %s%s\n", entry_i->done ? 'X' : ' ', entry_i->description, marker);
     }
 
-    const long tell_result = ftell(file);
-    if (tell_result < 0) kpd_error(ERR_TELL, "ftell() failed");
-    const int truncate_result = ftruncate(fileno(file), tell_result);
-    if (truncate_result < 0) kpd_error(ERR_TRUNCATE, "ftell() failed");
+    fclose(file);
 }
 
 void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigned int max_marker_length)
@@ -296,71 +308,76 @@ void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigne
 
 void kpd_print_entries(const struct EntryBuffer *entries, const char *mask)
 {
-    const bool mask_valid = mask != NULL;
+    bool mask_valid;
+    size_t max_number;
+    unsigned int max_length, max_marker_length;
+    const struct Entry *entry_i;
+    const char *mask_i;
 
-    size_t max_number = 0; //Could optimize for sorted arrays, doesn't improve Big O though
-    unsigned int max_marker_length = 0;
-    const char *mask_i = mask;
-    for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
+    mask_valid = mask != NULL;
+    max_number = 0;
+    max_marker_length = 0;
+    for (entry_i = entries->p, mask_i = mask; entry_i < entries->p + entries->size; entry_i++)
     {
         const bool print = (!mask_valid || *mask_i != '\0');
         if (print)
         {
-            const unsigned int marker_length = get_marker_length(entry->done, entry->priority);
-            if (entry->number > max_number) max_number = entry->number;
+            /* Could optimize get_marker_length() calls for sorted arrays, doesn't improve Big O though */
+            const unsigned int marker_length = get_marker_length(entry_i->done, entry_i->priority);
+            if (entry_i->number > max_number) max_number = entry_i->number;
             if (marker_length > max_marker_length) max_marker_length = marker_length;
         }
         if (mask_valid) mask_i++;
     }
-    const unsigned int max_length = get_number_length(max_number + 1);
-
-    mask_i = mask;
-    for (const struct Entry *entry = entries->p; entry < entries->p + entries->size; entry++)
+    
+    max_length = get_number_length(max_number + 1);
+    for (entry_i = entries->p, mask_i = mask; entry_i < entries->p + entries->size; entry_i++)
     {
         const bool print = (!mask_valid || *mask_i != '\0');
-        if (print) kpd_print_entry(entry, max_length, max_marker_length);
+        if (print) kpd_print_entry(entry_i, max_length, max_marker_length);
         if (mask_valid) mask_i++;
     }
 }
 
 bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
 {
-    if (mask != NULL) memset(mask, 0, mask_size);
+    const char *current_string;
 
-    const char *current_string = number_string;
+    if (mask != NULL) memset(mask, 0, mask_size);
+    current_string = number_string;
     while (*current_string != '\0')
     {
-        //Try to read number
+        /* Try to read number */
         char *next_string;
         size_t begin = strtoul(current_string, &next_string, 10);
         if (next_string != current_string)
         {
-            //Number read
+            /* Number read */
             const bool hyphen = (*next_string == '-');
             current_string = hyphen ? (next_string + 1) : (next_string);
             if (mask != NULL && (begin == 0 || begin > mask_size))
                 kpd_error(ERR_USAGE, "'%u' is out of range", (unsigned int)begin);
             if (hyphen)
             {
-                //Hyphen after number
+                /* Hyphen after number */
                 if (!kpd_parse_number_post_hyphen(&current_string, mask, mask_size, true, begin)) return false;
             }
             else
             {
-                //Something else after number
+                /* Something else after number */
                 if (mask != NULL) memset(mask+(begin-1), '\1', 1);
                 if (!kpd_parse_number_post_number(&current_string)) return false;
             }
         }
         else if (*next_string == '-')
         {
-            //Number not read, hyphen read
+            /* Number not read, hyphen read */
             current_string = next_string + 1;
             if (!kpd_parse_number_post_hyphen(&current_string, mask, mask_size, false, 0)) return false;
         }
         else
         {
-            //No number and no hyphen
+            /* No number and no hyphen */
             return false;
         }
     }
@@ -377,9 +394,11 @@ char *kpd_create_mask(size_t mask_size, const char *number_string)
 
 char *kpd_create_mask_highest_open(const struct EntryBuffer *entries)
 {
-    char *mask = malloc(entries->size);
-    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    char *mask;
     size_t highest;
+    
+    mask = malloc(entries->size);
+    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
     if (!entries_highest_open(&highest, entries)) kpd_error(ERR_USAGE, "no entries");
     memset(mask, '\0', entries->size);
     mask[highest] = '\1';
@@ -388,14 +407,18 @@ char *kpd_create_mask_highest_open(const struct EntryBuffer *entries)
 
 char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
 {
-    char *mask = malloc(entries->size);
+    char *mask;
+    const struct Entry *entry_i, *last;
+    
+    mask = malloc(entries->size);
     if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
-    const struct Entry *last = NULL;
-    for (const struct Entry *entry = entries->p + entries->size; entry-- > entries->p;)
+
+    last = NULL;
+    for (entry_i = entries->p + entries->size; entry_i-- > entries->p;)
     {
-        if (!entry->done)
+        if (!entry_i->done)
         {
-            last = entry;
+            last = entry_i;
             break;
         }
     }
@@ -407,27 +430,33 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
 
 bool kpd_resolve_action(enum Action *action, const char *action_string)
 {
-    size_t action_index;
     const char *action_strings[] = { "commit", "remove", "done", "undo", "priority", "edit" };
-    const bool result = string_resolve(&action_index, action_string, action_strings, sizeof(action_strings)/sizeof(*action_strings));
+    size_t action_index;
+    bool result;
+    
+    result = string_resolve(&action_index, action_string, action_strings, sizeof(action_strings)/sizeof(*action_strings));
     if (result) *action = (enum Action)action_index;
     return result;
 }
 
 bool kpd_resolve_status(enum Status *status, const char *status_string)
 {
-    size_t status_index;
     const char *status_strings[] = { "all", "open", "done" };
-    const bool result = string_resolve(&status_index, status_string, status_strings, sizeof(status_strings)/sizeof(*status_strings));
+    size_t status_index;
+    bool result;
+    
+    result = string_resolve(&status_index, status_string, status_strings, sizeof(status_strings)/sizeof(*status_strings));
     if (result) *status = (enum Status)status_index;
     return result;
 }
 
 bool kpd_resolve_priority(enum Priority *priority, const char *priority_string)
 {
-    size_t priority_index;
     const char *priority_strings[] = { "low", "medium", "high", "critical" };
-    const bool result = string_resolve(&priority_index, priority_string, priority_strings, sizeof(priority_strings)/sizeof(*priority_strings));
+    size_t priority_index;
+    bool result;
+
+    result = string_resolve(&priority_index, priority_string, priority_strings, sizeof(priority_strings)/sizeof(*priority_strings));
     if (result) *priority = (enum Priority)priority_index;
     return result;
 }
@@ -441,21 +470,31 @@ bool kpd_resolve_commit(const char *commit_string)
 
 void kpd_invoke_git(const char *path, const char *commit_message)
 {
+    size_t path_length_1, commit_message_length_1;
+    char *path_copy, *commit_message_copy;
     char *arguments[5];
+
+    path_length_1 = strlen(path) + 1;
+    commit_message_length_1 = strlen(commit_message) + 1;
+    path_copy = malloc(path_length_1);
+    commit_message_copy = malloc(commit_message_length_1);
+    if (path_copy == NULL || commit_message_copy == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    memcpy(path_copy, path, path_length_1);
+    memcpy(commit_message_copy, commit_message, commit_message_length_1);
+    
     arguments[0] = "git";
     arguments[1] = "add";
-    arguments[2] = strdup(path);
+    arguments[2] = path_copy;
     arguments[3] = NULL;
-    if (arguments[2] == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
     kpd_invoke(arguments);
-    free(arguments[2]);
 
     arguments[0] = "git";
     arguments[1] = "commit";
     arguments[2] = "-m";
-    arguments[3] = strdup(commit_message);
+    arguments[3] = commit_message_copy;
     arguments[4] = NULL;
-    if (arguments[3] == NULL) kpd_error(ERR_MALLOC, "strdup() failed");
     kpd_invoke(arguments);
-    free(arguments[3]);
+
+    free(path_copy);
+    free(commit_message_copy);
 }

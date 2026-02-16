@@ -2,11 +2,10 @@
 cmake_minimum_required(VERSION 3.10)
 project(PersonalDispatcher LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
-set(CMAKE_VERBOSE_MAKEFILE TRUE)
-cmake_policy(SET CMP0074 NEW)
-add_compile_options(-Wall -Wextra -Wconversion -Wsign-conversion -Werror -pedantic -fanalyzer)
-
-unset(ENABLE_READLINE)
+add_compile_options(-Wall -Wextra -pedantic)
+add_compile_options(-Wconversion -Wsign-conversion -Wmissing-declarations -Wunreachable-code -fanalyzer)
+add_compile_options(-ansi -std=c89)
+add_compile_options(-Werror)
 
 # Dependencies
 if (ENABLE_READLINE)

@@ -10,41 +10,42 @@
 
 typedef int (Command)(int argc, char **argv);
 
-///Exit code
+/* Exit code */
 enum Error
 {
     ERR_OK = 0,
 
-    //User error
+    /* User error */
     ERR_USAGE = 10,
     ERR_FORMAT = 11,
 
-    //File operations
-    ERR_SEEK = 20,
-    ERR_TRUNCATE = 21,
-    ERR_TELL = 22,
+    /* File operations */
+    ERR_FILE_OPEN = 20,
 
-    //Filesystem
+    /* Filesystem */
     ERR_PATH = 30,
-    ERR_NOT_FOUND = 31,
-    ERR_NOT_FILE = 32,
-    ERR_NOT_DIRECTORY = 33,
+    ERR_OPEN_FILE_READ = 31,
+    ERR_OPEN_FILE_WRITE = 32,
+    ERR_OPEN_DIRECTORY = 33,
 
-    //Memory
+    /* Memory */
     ERR_MALLOC = 40,
     ERR_REALLOC = 41,
 
-    //Processes
+    /* Processes */
     ERR_FORK = 50,
     ERR_EXEC = 51,
     ERR_WAIT = 52,
     ERR_GIT = 53,
 
-    //Other
-    ERR_NOT_IMPLEMENTED = 60
+    /* String operations */
+    ERR_SUBSTITUTE = 60,
+
+    /* Other */
+    ERR_NOT_IMPLEMENTED = 70
 };
 
-///Action to be performed on after "find" command
+/* Action to be performed on after "find" command */
 enum Action
 {
     ACT_COMMIT,
@@ -52,10 +53,11 @@ enum Action
     ACT_DONE,
     ACT_UNDO,
     ACT_PRIORITY,
-    ACT_EDIT
+    ACT_EDIT,
+    ACT_NONE
 };
 
-///Status to be added to "sort" and "list" commands
+/* Status to be added to "sort" and "list" commands */
 enum Status
 {
     STA_ALL,
@@ -63,7 +65,7 @@ enum Status
     STA_DONE
 };
 
-///Priority of a entry
+/* Priority of a entry */
 enum Priority
 {
     PRI_LOW,
@@ -72,17 +74,17 @@ enum Priority
     PRI_CRITICAL
 };
 
-///Entry aka task
+/* Entry aka task */
 struct Entry
 {
-    size_t number;          ///< Entry number, zero-based
-    char *description;      ///< Plain text description
-    enum Priority priority; ///< Priority
-    bool priority_explicit; ///< Indicator if priority was given explicitly
-    bool done;              ///< Task is done
+    size_t number;          /* Entry number, zero-based */
+    char *description;      /* Plain text description */
+    enum Priority priority; /* Priority */
+    bool priority_explicit; /* Indicator if priority was given explicitly */
+    bool done;              /* Task is done */
 };
 
-///Vector of entries
+/* Vector of entries */
 struct EntryBuffer
 {
     struct Entry *p;
@@ -90,7 +92,7 @@ struct EntryBuffer
     size_t capacity;
 };
 
-///Vector of chars, size indicates the logical size, capacity indicates the allocated size (including null)
+/* Vector of chars, size indicates the logical size, capacity indicates the allocated size (including null) */
 struct CharBuffer
 {
     char *p;
@@ -98,72 +100,74 @@ struct CharBuffer
     size_t capacity;
 };
 
-//common.c
-///Prints error message and exits
+/* common.c */
+/* Prints error message and exits */
 void kpd_error(enum Error error, const char *format, ...) __attribute__((noreturn)) __attribute__ ((format (printf, 2, 3)));
-///Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL)
-void kpd_read_target(void *file, struct EntryBuffer *entries, struct CharBuffer *path);
-///Writes entries to the open FILE*
-void kpd_write_target(void *file, const struct EntryBuffer *entries);
-///Prints entry to stdout (max_length/max_marker_length are zero for no spaces)
+/* Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL) */
+void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path);
+/* Writes entries to the open FILE* */
+void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer *path);
+/* Prints entry to stdout (max_length/max_marker_length are zero for no spaces) */
 void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigned int max_marker_length);
-///Prints entries to stdout (if mask is NULL, prints all)
+/* Prints entries to stdout (if mask is NULL, prints all) */
 void kpd_print_entries(const struct EntryBuffer *entries, const char *mask);
-///Parses number and sets mask (if mask is NULL, only checks format)
+/* Parses number and sets mask (if mask is NULL, only checks format) */
 bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string);
-///Sets mask based on parsed number
+/* Sets mask based on parsed number */
 char *kpd_create_mask(size_t mask_size, const char *number_string);
-///Sets mask based on open entry with highest priority
+/* Sets mask based on open entry with highest priority */
 char *kpd_create_mask_highest_open(const struct EntryBuffer *entries);
-///Sets mask based on last done entry
+/* Sets mask based on last done entry */
 char *kpd_create_mask_last_closed(const struct EntryBuffer *entries);
-///Parses action string (if action is NULL, only checks)
+/* Parses action string (if action is NULL, only checks) */
 bool kpd_resolve_action(enum Action *action, const char *action_string);
-///Parses status string (if status is NULL, only checks)
+/* Parses status string (if status is NULL, only checks) */
 bool kpd_resolve_status(enum Status *status, const char *status_string);
-///Parses priority string (if priority is NULL, only checks)
+/* Parses priority string (if priority is NULL, only checks) */
 bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
-///Returns if string can be resolved as 'commit'
+/* Returns if string can be resolved as 'commit' */
 bool kpd_resolve_commit(const char *commit_string);
-///Invokes git
+/* Invokes git */
 void kpd_invoke_git(const char *path, const char *commit_message);
 
-//entries.c
-///Sets buffer size
+/* entries.c */
+/* Find substring in a string, case-insensitive */
+const char *string_find_case(const char *haystack, const char *needle);
+/* Sets buffer size */
 void entries_set_size(struct EntryBuffer *entries, size_t size);
-///Destroys buffer
+/* Destroys buffer */
 void entries_finalize(struct EntryBuffer *entries, bool free_descriptions);
-///Finds open entry with highest priority
+/* Finds open entry with highest priority */
 bool entries_highest_open(size_t *index, const struct EntryBuffer *entries);
-///Sorts entries by priority, critical first
+/* Sorts entries by priority, critical first */
 void entries_sort(const struct EntryBuffer *entries);
 
-//string.c
-///Sets string size, size does not include '\0'
+/* string.c */
+/* Sets string size, size does not include '\0' */
 void string_set_size(struct CharBuffer *string, size_t size);
-///Sets string to line read from file, returns whether read something
+/* Sets string to line read from file, returns whether read something */
 bool string_set_line(struct CharBuffer *string, void *file);
-///Sets string to user input
+/* Sets string to user input */
 void string_set_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt);
-///Sets string to current working directory
+/* Sets string to current working directory */
 void string_set_cwd(struct CharBuffer *path);
-///Destroys buffer
+/* Destroys buffer */
 void string_finalize(struct CharBuffer *string);
-///Substitutes a segment of the string
+/* Substitutes a segment of the string */
 void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, size_t substitution_size);
-///Appends TODO.md to path
+/* Appends TODO.md to path */
 void string_append_file(struct CharBuffer *path);
-///Removes last file or directory from path
+/* Removes last file or directory from path */
 bool string_remove_file(struct CharBuffer *path);
-///Removes trailing and leading spaces from string
-void string_trim(struct CharBuffer *string, size_t beginning_spaces, size_t ending_spaces);
-///Transforms description to commit message
+/* Removes trailing and leading spaces from string */
+void string_trim(struct CharBuffer *string);
+/* Transforms description to commit message */
 void string_description_to_done_commit(struct CharBuffer *string);
-///Transforms description to commit message
+/* Transforms description to commit message */
 void string_description_to_undo_commit(struct CharBuffer *string);
-///Transforms description to commit message
+/* Transforms description to commit message */
 void string_description_to_remove_commit(struct CharBuffer *string);
-///Resolves string
+/* Resolves string */
 bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size);
 
 #endif
