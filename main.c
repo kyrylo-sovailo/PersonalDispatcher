@@ -246,7 +246,7 @@ static int kpd_edit(int argc, char **argv)
     free(mask);
     entries_finalize(&entries, true);
     string_finalize(&path);
-    if (description.capacity != 0) string_finalize(&description);
+    if (description.capacity > 0) string_finalize(&description);
     return ERR_OK;
 }
 
@@ -302,7 +302,7 @@ static int kpd_commit(int argc, char **argv)
     free(mask);
     entries_finalize(&entries, true);
     string_finalize(&path);
-    if (commit_message.capacity != 0) string_finalize(&commit_message);
+    if (commit_message.capacity > 0) string_finalize(&commit_message);
     return ERR_OK;
 }
 
@@ -374,7 +374,7 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     free(mask);
     entries_finalize(&entries, true);
     string_finalize(&path);
-    if (commit_message.capacity != 0) string_finalize(&commit_message);
+    if (commit_message.capacity > 0) string_finalize(&commit_message);
     return ERR_OK;
 }
 
@@ -518,7 +518,7 @@ static int kpd_find(int argc, char **argv)
         free(mask);
         string_finalize(&path);
         entries_finalize(&entries, true);
-        if (new_description_or_commit_message.capacity != 0) string_finalize(&new_description_or_commit_message);
+        if (new_description_or_commit_message.capacity > 0) string_finalize(&new_description_or_commit_message);
         return ERR_OK;
     }
 
@@ -558,7 +558,7 @@ static int kpd_find(int argc, char **argv)
     free(mask);
     string_finalize(&path);
     entries_finalize(&entries, true);
-    if (new_description_or_commit_message.capacity != 0) string_finalize(&new_description_or_commit_message);
+    if (new_description_or_commit_message.capacity > 0) string_finalize(&new_description_or_commit_message);
     return ERR_OK;
 }
 

@@ -254,7 +254,6 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
     }
 
     /* Parse TODO.md */
-    string_set_size(&line, INITIAL_BUFFER_SIZE);
     entry_number = 0;
     while (string_set_line(&line, file))
     {

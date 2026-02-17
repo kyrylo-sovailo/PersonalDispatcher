@@ -64,6 +64,7 @@ void string_set_size(struct CharBuffer *string, size_t size)
 
 bool string_set_line(struct CharBuffer *string, void *file)
 {
+    if (string->capacity < INITIAL_BUFFER_SIZE + 1) string_set_size(string, INITIAL_BUFFER_SIZE);
     string->size = 0;
     while (true)
     {
@@ -108,12 +109,15 @@ void string_set_input(struct CharBuffer *string, const char *prompt, const char 
         {
             string->p = line;
             string->size = strlen(line);
-            string->capacity = string->size;
+            string->capacity = string->size + 1;
+        }
+        else
+        {
+            memset(line, 0, sizeof(*string));
         }
     #else
         printf("%s%s\n", prefill_prompt, prefill);
         printf("%s", prompt);
-        string_set_size(string, INITIAL_BUFFER_SIZE);
         string_set_line(string, stdin);
     #endif
     string_trim(string);
