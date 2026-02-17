@@ -14,7 +14,6 @@
 
 /* Required by string_set_input */
 #ifdef ENABLE_READLINE
-#error "No readline"
 static const char *string_set_input_prefill;
 static int string_set_input_hook(void)
 {
@@ -99,10 +98,11 @@ bool string_set_line(struct CharBuffer *string, void *file)
 void string_set_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt)
 {
     #ifdef ENABLE_READLINE
+        char *line;
         (void)prefill_prompt;
         rl_startup_hook = string_set_input_hook;
         string_set_input_prefill = prefill;
-        char *line = readline(prompt);
+        line = readline(prompt);
         string_finalize(string);
         if (line != NULL)
         {
