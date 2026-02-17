@@ -108,9 +108,9 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path);
 /* Writes entries to the open FILE* */
 void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer *path);
 /* Prints entry to stdout (max_length/max_marker_length are zero for no spaces) */
-void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigned int max_marker_length);
+void kpd_print_entry(const struct Entry *entry, const char *highlight, unsigned int max_length, unsigned int max_marker_length);
 /* Prints entries to stdout (if mask is NULL, prints all) */
-void kpd_print_entries(const struct EntryBuffer *entries, const char *mask);
+void kpd_print_entries(const struct EntryBuffer *entries, const char *highlight, const char *mask);
 /* Parses number and sets mask (if mask is NULL, only checks format) */
 bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string);
 /* Sets mask based on parsed number */

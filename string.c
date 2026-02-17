@@ -36,7 +36,7 @@ const char *string_find_case(const char *haystack, const char *needle)
         {
             char needle_c = needle[i];
             char haystack_c = haystack[i];
-            /* if (needle_c >= 'A' && needle_c <= 'Z') needle_c += ('a' - 'A'); */
+            if (needle_c >= 'A' && needle_c <= 'Z') needle_c += ('a' - 'A'); /* Needed for highlighting */
             if (haystack_c >= 'A' && haystack_c <= 'Z') haystack_c += ('a' - 'A');
             if (needle_c != haystack_c) { difference = true; break; }
         }
@@ -138,7 +138,7 @@ void string_set_cwd(struct CharBuffer *path)
 
 void string_finalize(struct CharBuffer *string)
 {
-    if (string->p == NULL) return;
+    if (string->p != NULL) free(string->p);
     memset(string, 0, sizeof(*string));
 }
 

@@ -10,6 +10,6 @@
  - [X] sort
  - [X] next
  - [X] test
- - [ ] find
+ - [X] find
  - [X] help
  - [X] version

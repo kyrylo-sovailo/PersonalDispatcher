@@ -186,6 +186,41 @@ static void kpd_invoke(char *const *arguments)
     }
 }
 
+/* Needed by kpd_print_entry */
+static void kpd_print_string(const char *string, const char *highlight)
+{
+    const char *first_found = NULL, *previous_found = NULL;
+    size_t highlight_length;
+    if (highlight == NULL) { printf("%s", string); return; }
+
+    highlight_length = strlen(highlight);
+    while (true)
+    {
+        const char *found = string_find_case(string, highlight);
+        if (found == NULL)
+        {
+            /* No more entries */
+            if (previous_found == NULL) printf("%s", string);
+            else printf(RED "%.*s" DEFAULT "%s", (int)(previous_found + highlight_length - first_found), first_found, previous_found + highlight_length);
+            break;
+        }
+        else if (previous_found == NULL || found > previous_found + highlight_length)
+        {
+            /* Entry does not intersect with the previous entry */
+            if (previous_found == NULL) printf("%.*s", (int)(found - string), string);
+            else printf(RED "%.*s" DEFAULT, (int)(previous_found + highlight_length - first_found), first_found);
+            first_found = found;
+        }
+        else
+        {
+            /* Entry intersects with the previous entry */
+            /* Do nothing */
+        }
+        previous_found = found;
+        string = found + 1;
+    }
+}
+
 void kpd_error(enum Error error, const char *format, ...)
 {
     va_list va;
@@ -279,7 +314,7 @@ void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer
     fclose(file);
 }
 
-void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigned int max_marker_length)
+void kpd_print_entry(const struct Entry *entry, const char *highlight, unsigned int max_length, unsigned int max_marker_length)
 {
     const char *markers[4] =
     {
@@ -299,14 +334,15 @@ void kpd_print_entry(const struct Entry *entry, unsigned int max_length, unsigne
     const unsigned int left_marker_spaces = (marker_spaces) / 2;
     const unsigned int right_marker_spaces = (marker_spaces + 1) / 2;
 
-    printf("%u.%*s %*s%s%*s %s\n",
+    printf("%u.%*s %*s%s%*s ",
         (unsigned int)number,
         number_spaces, "",
-        left_marker_spaces, "", marker, right_marker_spaces, "",
-        entry->description);
+        left_marker_spaces, "", marker, right_marker_spaces, "");
+    kpd_print_string(entry->description, highlight);
+    printf("\n");
 }
 
-void kpd_print_entries(const struct EntryBuffer *entries, const char *mask)
+void kpd_print_entries(const struct EntryBuffer *entries, const char *highlight, const char *mask)
 {
     bool mask_valid;
     size_t max_number;
@@ -334,7 +370,7 @@ void kpd_print_entries(const struct EntryBuffer *entries, const char *mask)
     for (entry_i = entries->p, mask_i = mask; entry_i < entries->p + entries->size; entry_i++)
     {
         const bool print = (!mask_valid || *mask_i != '\0');
-        if (print) kpd_print_entry(entry_i, max_length, max_marker_length);
+        if (print) kpd_print_entry(entry_i, highlight, max_length, max_marker_length);
         if (mask_valid) mask_i++;
     }
 }
