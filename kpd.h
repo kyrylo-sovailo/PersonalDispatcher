@@ -1,10 +1,13 @@
 #ifndef KPD_H
 #define KPD_H
 
+#include "commonlib/buffer.h"
+#include "commonlib/char_buffer.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 
-#define VERSION "1.0.0"
+#define VERSION "1.1.0"
 #define TARGET "TODO.md"
 #define INITIAL_BUFFER_SIZE 127
 
@@ -39,10 +42,12 @@ enum Error
     ERR_GIT = 53,
 
     /* String operations */
-    ERR_SUBSTITUTE = 60,
+    ERR_REPLACE = 60,
+    ERR_CODEC = 61,
 
     /* Other */
-    ERR_NOT_IMPLEMENTED = 70
+    ERR_NOT_IMPLEMENTED = 70,
+    ERR_OTHER = 71
 };
 
 /* Action to be performed on after "find" command */
@@ -83,26 +88,9 @@ struct Entry
     bool priority_explicit; /* Indicator if priority was given explicitly */
     bool done;              /* Task is done */
 };
-
-/* Vector of entries */
-struct EntryBuffer
-{
-    struct Entry *p;
-    size_t size;
-    size_t capacity;
-};
-
-/* Vector of chars, size indicates the logical size, capacity indicates the allocated size (including null) */
-struct CharBuffer
-{
-    char *p;
-    size_t size;
-    size_t capacity;
-};
+DECLARE_BUFFER(struct Entry, EntryBuffer)
 
 /* common.c */
-/* Prints error message and exits */
-void kpd_error(enum Error error, const char *format, ...) __attribute__((noreturn)) __attribute__ ((format (printf, 2, 3)));
 /* Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL) */
 void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path);
 /* Writes entries to the open FILE* */
@@ -133,34 +121,19 @@ void kpd_invoke_git(const char *path, const char *commit_message);
 /* entries.c */
 /* Find substring in a string, case-insensitive */
 const char *string_find_case(const char *haystack, const char *needle);
-/* Sets buffer size */
-void entries_set_size(struct EntryBuffer *entries, size_t size);
-/* Destroys buffer */
-void entries_finalize(struct EntryBuffer *entries, bool free_descriptions);
 /* Finds open entry with highest priority */
 bool entries_highest_open(size_t *index, const struct EntryBuffer *entries);
 /* Sorts entries by priority, critical first */
 void entries_sort(const struct EntryBuffer *entries);
 
+DECLARE_BUFFER_RESIZE(struct Entry, EntryBuffer, entries_)
+DECLARE_BUFFER_FINALIZE(struct Entry, EntryBuffer, entries_)
+
 /* string.c */
-/* Sets string size, size does not include '\0' */
-void string_set_size(struct CharBuffer *string, size_t size);
 /* Sets string to line read from file, returns whether read something */
-bool string_set_line(struct CharBuffer *string, void *file);
+bool string_get_line(struct CharBuffer *string, void *file);
 /* Sets string to user input */
-void string_set_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt);
-/* Sets string to current working directory */
-void string_set_cwd(struct CharBuffer *path);
-/* Destroys buffer */
-void string_finalize(struct CharBuffer *string);
-/* Substitutes a segment of the string */
-void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, size_t substitution_size);
-/* Appends TODO.md to path */
-void string_append_file(struct CharBuffer *path);
-/* Removes last file or directory from path */
-bool string_remove_file(struct CharBuffer *path);
-/* Removes trailing and leading spaces from string */
-void string_trim(struct CharBuffer *string);
+void string_get_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt);
 /* Transforms description to commit message */
 void string_description_to_done_commit(struct CharBuffer *string);
 /* Transforms description to commit message */

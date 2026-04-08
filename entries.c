@@ -1,40 +1,14 @@
 #include "kpd.h"
+#include "commonlib/buffer_implementation.h"
 
 #include <string.h>
 #include <stdlib.h>
 
-void entries_set_size(struct EntryBuffer *entries, size_t size)
-{
-    if (size > entries->capacity)
-    {
-        size_t new_capacity;
-        struct Entry *new_p;
+static void entries_initialize_element(struct Entry *entry) { const struct Entry zero = ZERO_INIT; *entry = zero; }
+static void entries_finalize_element(struct Entry *entry) { if (entry->description != NULL) free(entry->description); }
 
-        new_capacity = (entries->capacity == 0) ? 1 : entries->capacity;
-        while (size > new_capacity) new_capacity *= 2;
-        new_p = realloc(entries->p, new_capacity * sizeof(*entries->p));
-        if (new_p == NULL) kpd_error(ERR_REALLOC, "realloc() failed");
-        entries->capacity = new_capacity;
-        entries->p = new_p;
-        memset(&entries->p[entries->size], 0, (size - entries->size) * sizeof(*entries->p));
-    }
-    entries->size = size;
-}
-
-void entries_finalize(struct EntryBuffer *entries, bool free_descriptions)
-{
-    if (entries->p == NULL) return;
-    if (free_descriptions)
-    {
-        const struct Entry *entry_i;
-        for (entry_i = entries->p; entry_i < entries->p + entries->size; entry_i++)
-        {
-            free(entry_i->description);
-        }
-    }
-    free(entries->p);
-    memset(entries, 0, sizeof(*entries));
-}
+IMPLEMENT_BUFFER_RESIZE(struct Entry, EntryBuffer, entries_)
+IMPLEMENT_BUFFER_FINALIZE(struct Entry, EntryBuffer, entries_)
 
 bool entries_highest_open(size_t *index, const struct EntryBuffer *entries)
 {

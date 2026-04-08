@@ -1,3 +1,6 @@
+#include "commonlib/error.h"
+#include "commonlib/string.h"
+#include "commonlib/path.h"
 #include "kpd.h"
 
 #include <sys/wait.h>
@@ -47,7 +50,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     || line->p[3] != '['
     || (line->p[4] != ' ' && line->p[4] != 'X')
     || line->p[5] != ']'
-    || line->p[6] != ' ') kpd_error(ERR_FORMAT, "invalid line '%s'", line->p);
+    || line->p[6] != ' ') error_print_die(ERR_FORMAT, "invalid line '%s'", line->p);
     entry->done = line->p[4] == 'X';
     
     /* Parse priority */
@@ -61,7 +64,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
             /* Remove marker */
             entry->priority = priority_i;
             entry->priority_explicit = true;
-            string_substitute(line, (size_t)(marker_found - line->p), strlen(markers[priority_i]), "", 0);
+            string_replace_mem(line, (size_t)(marker_found - line->p), strlen(markers[priority_i]), NULL, 0);
             break;
         }
     }
@@ -70,7 +73,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     memset(line->p, ' ', 7);
     string_trim(line); /* Not really efficient because requires one more memcpy*/
     entry->description = malloc(line->size + 1);
-    if (entry->description == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    if (entry->description == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
     memcpy(entry->description, line->p, line->size + 1);
     return true;
 }
@@ -147,7 +150,7 @@ static bool kpd_parse_number_post_hyphen(const char **current_string, char *mask
             *current_string = next_string;
             if (begin_read && begin > end) return false;
             if (mask != NULL && (end == 0 || end > mask_size))
-                kpd_error(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
+                error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
         }
         if (mask != NULL) memset(mask+(begin-1), '\1', end-(begin-1));
         return kpd_parse_number_post_number(current_string);
@@ -172,17 +175,17 @@ static void kpd_invoke(char *const *arguments)
     id = fork();
     if (id < 0)
     {
-        kpd_error(ERR_FORK, "vfork() failed");
+        error_print_die(ERR_FORK, "vfork() failed");
     }
     else if (id == 0)
     {
-        if (execvp(arguments[0], arguments) < 0) kpd_error(ERR_EXEC, "execvp() failed");
+        if (execvp(arguments[0], arguments) < 0) error_print_die(ERR_EXEC, "execvp() failed");
     }
     else
     {
         int status;
-        if (waitpid(id, &status, 0) < 0) kpd_error(ERR_WAIT, "waitpid() failed");
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) kpd_error(ERR_GIT, "'%s' failed", arguments[0]);
+        if (waitpid(id, &status, 0) < 0) error_print_die(ERR_WAIT, "waitpid() failed");
+        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) error_print_die(ERR_GIT, "'%s' failed", arguments[0]);
     }
 }
 
@@ -221,43 +224,31 @@ static void kpd_print_string(const char *string, const char *highlight)
     }
 }
 
-void kpd_error(enum Error error, const char *format, ...)
-{
-    va_list va;
-
-    va_start(va, format);
-    fprintf(stderr, "kpd: ");
-    vfprintf(stderr, format, va);
-    fprintf(stderr, "\n");
-    va_end(va);
-    exit((int)error);
-}
-
 void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
 {
-    struct CharBuffer local_path = { 0 }, line = { 0 };
+    struct CharBuffer local_path = ZERO_INIT, line = ZERO_INIT;
     size_t steps, entry_number;
     FILE *file;
 
     /* Search for TODO.md */
-    string_set_cwd(&local_path);
-    string_append_file(&local_path);
+    path_get_working_directory(&local_path);
+    path_append_mem(&local_path, TARGET, strlen(TARGET));
     steps = 0;
     while (true)
     {
         file = fopen(local_path.p, "r+");
         if (file != NULL) break;
-        if (!string_remove_file(&local_path) || !string_remove_file(&local_path))
-            kpd_error(ERR_USAGE, "current_string directory does not contain " TARGET);
-        string_append_file(&local_path);
+        if (!path_get_directory(&local_path, &local_path, true) || !path_get_directory(&local_path, &local_path, true))
+            error_print_die(ERR_USAGE, "current_string directory does not contain " TARGET);
+        path_append_mem(&local_path, TARGET, strlen(TARGET));
         steps++;
     }
 
     /* Parse TODO.md */
     entry_number = 0;
-    while (string_set_line(&line, file))
+    while (string_get_line(&line, file))
     {
-        struct Entry entry = { 0 };
+        struct Entry entry = ZERO_INIT;
         entry.number = entry_number;
         if (!kpd_read_line(&entry, &line)) continue;
         if (entries == NULL)
@@ -266,7 +257,7 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
         }
         else
         {
-            entries_set_size(entries, entry_number + 1);
+            entries_resize(entries, entry_number + 1);
             entries->p[entry_number] = entry;
         }
         entry_number++;
@@ -275,16 +266,16 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
     /* Make relative path */
     if (path != NULL)
     {
-        string_set_size(&local_path, 0);
+        string_zero(&local_path);
         if (steps == 0)
         {
-            string_substitute(&local_path, 0, 0, TARGET, strlen(TARGET));
+            string_replace_mem(&local_path, 0, 0, TARGET, strlen(TARGET));
         }
         else
         {
             size_t step_i;
-            for (step_i = 0; step_i < steps; step_i++) string_substitute(&local_path, local_path.size, 0, "../", 3);
-            string_append_file(&local_path);
+            for (step_i = 0; step_i < steps; step_i++) path_get_directory(&local_path, &local_path, true);
+            path_append_mem(&local_path, TARGET, strlen(TARGET));
         }
     }
 
@@ -301,7 +292,7 @@ void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer
     struct Entry *entry_i;
 
     file = fopen(path->p, "w");
-    if (file == NULL) kpd_error(ERR_FILE_OPEN, "fopen() failed");
+    if (file == NULL) error_print_die(ERR_FILE_OPEN, "fopen() failed");
 
     for (entry_i = entries->p; entry_i < entries->p + entries->size; entry_i++)
     {
@@ -391,7 +382,7 @@ bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
             const bool hyphen = (*next_string == '-');
             current_string = hyphen ? (next_string + 1) : (next_string);
             if (mask != NULL && (begin == 0 || begin > mask_size))
-                kpd_error(ERR_USAGE, "'%u' is out of range", (unsigned int)begin);
+                error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)begin);
             if (hyphen)
             {
                 /* Hyphen after number */
@@ -422,7 +413,7 @@ bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
 char *kpd_create_mask(size_t mask_size, const char *number_string)
 {
     char *mask = malloc(mask_size);
-    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
     kpd_parse_number(mask, mask_size, number_string);
     return mask;
 }
@@ -433,8 +424,8 @@ char *kpd_create_mask_highest_open(const struct EntryBuffer *entries)
     size_t highest;
     
     mask = malloc(entries->size);
-    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
-    if (!entries_highest_open(&highest, entries)) kpd_error(ERR_USAGE, "no entries");
+    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
+    if (!entries_highest_open(&highest, entries)) error_print_die(ERR_USAGE, "no entries");
     memset(mask, '\0', entries->size);
     mask[highest] = '\1';
     return mask;
@@ -446,7 +437,7 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
     const struct Entry *entry_i, *last;
     
     mask = malloc(entries->size);
-    if (mask == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
 
     last = NULL;
     for (entry_i = entries->p + entries->size; entry_i-- > entries->p;)
@@ -457,7 +448,7 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
             break;
         }
     }
-    if (last == NULL) kpd_error(ERR_USAGE, "no entries");
+    if (last == NULL) error_print_die(ERR_USAGE, "no entries");
     memset(mask, '\0', entries->size);
     mask[last - entries->p] = '\1';
     return mask;
@@ -513,7 +504,7 @@ void kpd_invoke_git(const char *path, const char *commit_message)
     commit_message_length_1 = strlen(commit_message) + 1;
     path_copy = malloc(path_length_1);
     commit_message_copy = malloc(commit_message_length_1);
-    if (path_copy == NULL || commit_message_copy == NULL) kpd_error(ERR_MALLOC, "malloc() failed");
+    if (path_copy == NULL || commit_message_copy == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
     memcpy(path_copy, path, path_length_1);
     memcpy(commit_message_copy, commit_message, commit_message_length_1);
     

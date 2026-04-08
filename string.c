@@ -1,4 +1,6 @@
 #include "kpd.h"
+#include "commonlib/error.h"
+#include "commonlib/string.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -12,7 +14,7 @@
 
 #define ascii_isalnum()
 
-/* Required by string_set_input */
+/* Required by string_get_input */
 #ifdef ENABLE_READLINE
 static const char *string_set_input_prefill;
 static int string_set_input_hook(void)
@@ -44,27 +46,9 @@ const char *string_find_case(const char *haystack, const char *needle)
     return NULL;
 }
 
-void string_set_size(struct CharBuffer *string, size_t size)
+bool string_get_line(struct CharBuffer *string, void *file)
 {
-    if (size + 1 > string->capacity)
-    {
-        size_t new_capacity;
-        char *new_p;
-        
-        new_capacity = (string->capacity == 0) ? 1 : string->capacity;
-        while (size + 1 > new_capacity) new_capacity *= 2;
-        new_p = realloc(string->p, new_capacity * sizeof(*string->p));
-        if (new_p == NULL) kpd_error(ERR_REALLOC, "realloc() failed");
-        string->capacity = new_capacity;
-        string->p = new_p;
-    }
-    string->size = size;
-    string->p[size] = '\0';
-}
-
-bool string_set_line(struct CharBuffer *string, void *file)
-{
-    if (string->capacity < INITIAL_BUFFER_SIZE + 1) string_set_size(string, INITIAL_BUFFER_SIZE);
+    if (string->capacity < INITIAL_BUFFER_SIZE + 1) string_resize(string, INITIAL_BUFFER_SIZE);
     string->size = 0;
     while (true)
     {
@@ -83,7 +67,7 @@ bool string_set_line(struct CharBuffer *string, void *file)
                 /* Endline not read, try again */
                 const size_t size = string->capacity - 1; /* Meaningful read symbols */
                 string->size = size;
-                string_set_size(string, 2 * size);
+                string_resize(string, 2 * size);
                 string->size = size;
             }
             else
@@ -96,7 +80,7 @@ bool string_set_line(struct CharBuffer *string, void *file)
     }    
 }
 
-void string_set_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt)
+void string_get_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt)
 {
     #ifdef ENABLE_READLINE
         char *line;
@@ -118,118 +102,9 @@ void string_set_input(struct CharBuffer *string, const char *prompt, const char 
     #else
         printf("%s%s\n", prefill_prompt, prefill);
         printf("%s", prompt);
-        string_set_line(string, stdin);
+        string_get_line(string, stdin);
     #endif
     string_trim(string);
-}
-
-void string_set_cwd(struct CharBuffer *path)
-{
-    string_set_size(path, INITIAL_BUFFER_SIZE);
-    while (true)
-    {
-        if (getcwd(path->p, path->capacity) == NULL)
-        {
-            string_set_size(path, 2 * path->size);
-        }
-        else
-        {
-            path->size = strlen(path->p);
-            break;
-        }
-    }
-}
-
-void string_finalize(struct CharBuffer *string)
-{
-    if (string->p != NULL) free(string->p);
-    memset(string, 0, sizeof(*string));
-}
-
-void string_substitute(struct CharBuffer *string, size_t segment_begin, size_t segment_size, const char *substitution, size_t substitution_size)
-{
-    char *segment_p;
-    if (segment_begin + segment_size > string->size) kpd_error(ERR_SUBSTITUTE, "illegal substring substitution");
-    if (substitution_size != segment_size)
-    {
-        const size_t old_size = string->size;
-        const size_t new_size = old_size + substitution_size - segment_size;
-        if (substitution_size > segment_size)
-        {
-            /* Expanding */
-            string_set_size(string, new_size);
-        }
-        segment_p = string->p + segment_begin;
-        memmove(segment_p + substitution_size, segment_p + segment_size, old_size - segment_size);
-        if (substitution_size < segment_size)
-        {
-            /* Shrinking */
-            string->p[new_size] = '\0';
-            string->size = new_size;
-        }
-    }
-    else
-    {
-        segment_p = string->p + segment_begin;
-    }
-    memcpy(segment_p, substitution, substitution_size);
-}
-
-void string_append_file(struct CharBuffer *path)
-{
-    const char *filename = "/" TARGET;
-    const bool ends_with_slash = path->size > 0 && path->p[path->size-1] == '/';
-    const size_t ends_with_slash_1 = ends_with_slash ? 1 : 0;
-    string_substitute(path, path->size - ends_with_slash_1, ends_with_slash_1, filename, strlen(filename));
-}
-
-bool string_remove_file(struct CharBuffer *path)
-{
-    bool ends_with_slash;
-    const char *previous_slash;
-    
-    ends_with_slash = path->size > 0 && path->p[path->size-1] == '/';
-    if (ends_with_slash) { path->size--; path->p[path->size] = '\0'; }
-    previous_slash = strrchr(path->p, '/');
-    if (previous_slash == NULL) return false; /* No slash */
-    if (previous_slash == path->p) return false; /* Slash on first position */
-    path->size = (size_t)(previous_slash - path->p);
-    path->p[path->size] = '\0';
-    return true;
-}
-
-void string_trim(struct CharBuffer *string)
-{
-    /* Count beginning spaces */
-    size_t beginning_spaces = 0, ending_spaces = 0, spaces;
-    while (true)
-    {
-        char c;
-        if (beginning_spaces == string->size)
-        {
-            /* The string is all spaces */
-            if (string->p != NULL) string->p[0] = '\0';
-            string->size = 0;
-            return;
-        }
-        c = string->p[beginning_spaces];
-        if (!(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v')) break;
-        beginning_spaces++;
-    }
-    
-    /* Count ending spaces */
-    while (true)
-    {
-        char c = string->p[string->size - ending_spaces - 1];
-        if (!(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v')) break;
-        ending_spaces++;
-    }
-    
-    /* Move */
-    spaces = beginning_spaces + ending_spaces;
-    if (beginning_spaces > 0) memmove(string->p, string->p + beginning_spaces, string->size - spaces);
-    string->size -= spaces;
-    string->p[string->size] = '\0';
 }
 
 void string_description_to_done_commit(struct CharBuffer *string)
@@ -306,7 +181,7 @@ void string_description_to_done_commit(struct CharBuffer *string)
         verb_perfect_length = strlen(verb_perfect);
         verb_match = 0;
         while (verb[verb_match] == verb_perfect[verb_match]) verb_match++;
-        string_substitute(string, found_begin + verb_match, verb_length - verb_match, verb_perfect + verb_match, verb_perfect_length - verb_match);
+        string_replace_mem(string, found_begin + verb_match, verb_length - verb_match, verb_perfect + verb_match, verb_perfect_length - verb_match);
         if (upper)
         {
             char *found_w = string->p + found_begin;
@@ -317,24 +192,24 @@ void string_description_to_done_commit(struct CharBuffer *string)
     }
 
     if (changed) return;
-    string_substitute(string, 0, 0, prefix, strlen(prefix));
-    string_substitute(string, string->size, 0, suffix, strlen(suffix));
+    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
+    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
 }
 
 void string_description_to_undo_commit(struct CharBuffer *string)
 {
     const char *prefix = "Reopened '";
     const char *suffix = "'";
-    string_substitute(string, 0, 0, prefix, strlen(prefix));
-    string_substitute(string, string->size, 0, suffix, strlen(suffix));
+    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
+    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
 }
 
 void string_description_to_remove_commit(struct CharBuffer *string)
 {
     const char *prefix = "Removed '";
     const char *suffix = "'";
-    string_substitute(string, 0, 0, prefix, strlen(prefix));
-    string_substitute(string, string->size, 0, suffix, strlen(suffix));
+    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
+    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
 }
 
 bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size)
