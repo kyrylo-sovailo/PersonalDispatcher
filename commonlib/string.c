@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 typedef unsigned char Flag;
 enum
@@ -31,6 +32,12 @@ enum
     LENGTH_LONG_DOUBLE  /* L  */
 };
 
+void string_initialize(struct CharBuffer *string)
+{
+    const struct CharBuffer zero = ZERO_INIT;
+    *string = zero;
+}
+
 void string_finalize(struct CharBuffer *string)
 {
     const struct CharBuffer zero = ZERO_INIT;
@@ -38,14 +45,14 @@ void string_finalize(struct CharBuffer *string)
     *string = zero;
 }
 
-const char *string_get(const struct CharBuffer *string)
+const cchar_t *string_get(const struct CharBuffer *string)
 {
-    return (string->p == NULL) ? "" : string->p;
+    return (string->p == NULL) ? COMMON_L("") : string->p;
 }
 
 void string_zero(struct CharBuffer *string)
 {
-    if (string->p != NULL) string->p[0] = '\0';
+    if (string->p != NULL) string->p[0] = COMMON_L('\0');
     string->size = 0;
 }
 
@@ -53,16 +60,16 @@ ERROR_TYPE string_resize(struct CharBuffer *string, size_t size)
 {
     if (size + 1 > string->capacity)
     {
-        char *new_p;
+        cchar_t *new_p;
         size_t new_capacity = (string->capacity == 0) ? 1 : string->capacity;
         while (size + 1 > new_capacity) new_capacity *= 2;
-        new_p = (char*)realloc(string->p, new_capacity * sizeof(*string->p));
+        new_p = (cchar_t*)realloc(string->p, new_capacity * sizeof(*string->p));
         ARET(ERR_MALLOC, new_p != NULL);
         string->capacity = new_capacity;
         string->p = new_p;
     }
     string->size = size;
-    string->p[size] = '\0';
+    string->p[size] = COMMON_L('\0');
     ERROR_RETURN_OK();
 }
 
@@ -70,10 +77,10 @@ ERROR_TYPE string_reserve(struct CharBuffer *string, size_t capacity)
 {
     if (capacity + 1 > string->capacity)
     {
-        char *new_p;
+        cchar_t *new_p;
         size_t new_capacity = (string->capacity == 0) ? 1 : string->capacity;
         while (capacity + 1 > new_capacity) new_capacity *= 2;
-        new_p = (char*)realloc(string->p, new_capacity * sizeof(*string->p));
+        new_p = (cchar_t*)realloc(string->p, new_capacity * sizeof(*string->p));
         ARET(ERR_MALLOC, new_p != NULL);
         string->capacity = new_capacity;
         string->p = new_p;
@@ -87,48 +94,36 @@ ERROR_TYPE string_copy(struct CharBuffer *string, const struct CharBuffer *other
     ERROR_RETURN_OK();
 }
 
-ERROR_TYPE string_copy_str(struct CharBuffer *string, const char *other)
+ERROR_TYPE string_copy_str(struct CharBuffer *string, const cchar_t *other)
 {
-    PRET(string_copy_mem(string, other, strlen(other)));
+    PRET(string_copy_mem(string, other, COMMON(str,wcs,len(other))));
     ERROR_RETURN_OK();
 }
 
-ERROR_TYPE string_copy_mem(struct CharBuffer *string, const char *other, size_t other_size)
+ERROR_TYPE string_copy_mem(struct CharBuffer *string, const cchar_t *other, size_t other_size)
 {
     PRET(string_resize(string, other_size));
     memcpy(string->p, other, other_size);
     ERROR_RETURN_OK();
 }
 
-ERROR_TYPE string_push(struct CharBuffer *string, char other)
+ERROR_TYPE string_push(struct CharBuffer *string, cchar_t other)
 {
     if (string->size + 2 > string->capacity)
     {
         const size_t new_capacity = (string->capacity == 0) ? 1 : (string->capacity * 2);
-        char *new_p = (char*)realloc(string->p, new_capacity * sizeof(*string->p));
+        cchar_t *new_p = (cchar_t*)realloc(string->p, new_capacity * sizeof(*string->p));
         ARET(ERR_MALLOC, new_p != NULL);
         string->capacity = new_capacity;
         string->p = new_p;
     }
     string->p[string->size] = other;
     string->size++;
-    string->p[string->size] = '\0';
+    string->p[string->size] = COMMON_L('\0');
     ERROR_RETURN_OK();
 }
 
-ERROR_TYPE string_append(struct CharBuffer *string, const struct CharBuffer *other)
-{
-    PRET(string_append_mem(string, other->p, other->size));
-    ERROR_RETURN_OK();
-}
-
-ERROR_TYPE string_append_str(struct CharBuffer *string, const char *other)
-{
-    PRET(string_append_mem(string, other, strlen(other)));
-    ERROR_RETURN_OK();
-}
-
-ERROR_TYPE string_append_mem(struct CharBuffer *string, const char *other, size_t other_size)
+ERROR_TYPE string_append_mem(struct CharBuffer *string, const cchar_t *other, size_t other_size)
 {
     const size_t old_size = string->size;
     PRET(string_resize(string, string->size + other_size));
@@ -142,7 +137,7 @@ void string_trim(struct CharBuffer *string)
     size_t beginning_spaces = 0, ending_spaces = 0, spaces;
     while (true)
     {
-        char c;
+        cchar_t c;
         if (beginning_spaces == string->size)
         {
             /* The string is all spaces */
@@ -150,28 +145,28 @@ void string_trim(struct CharBuffer *string)
             return;
         }
         c = string->p[beginning_spaces];
-        if (!(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v')) break;
+        if (!(c == COMMON_L(' ') || c == COMMON_L('\t') || c == COMMON_L('\n') || c == COMMON_L('\r') || c == COMMON_L('\v'))) break;
         beginning_spaces++;
     }
     
     /* Count ending spaces */
     while (true)
     {
-        char c = string->p[string->size - ending_spaces - 1];
-        if (!(c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v')) break;
+        cchar_t c = string->p[string->size - ending_spaces - 1];
+        if (!(c == COMMON_L(' ') || c == COMMON_L('\t') || c == COMMON_L('\n') || c == COMMON_L('\r') || c == COMMON_L('\v'))) break;
         ending_spaces++;
     }
     
     /* Move */
     spaces = beginning_spaces + ending_spaces;
-    if (beginning_spaces > 0) memmove(string->p, string->p + beginning_spaces, string->size - spaces);
+    if (beginning_spaces > 0) COMMON_W(w,memmove(string->p, string->p + beginning_spaces, string->size - spaces));
     string->size -= spaces;
-    string->p[string->size] = '\0';
+    string->p[string->size] = COMMON_L('\0');
 }
 
-ERROR_TYPE string_replace_mem(struct CharBuffer *string, size_t begin, size_t size, const char *other, size_t other_size)
+ERROR_TYPE string_replace_mem(struct CharBuffer *string, size_t begin, size_t size, const cchar_t *other, size_t other_size)
 {
-    char *segment_p;
+    cchar_t *segment_p;
     ARET(ERR_REPLACE, begin + size < string->size);
     if (other_size != size)
     {
@@ -187,7 +182,7 @@ ERROR_TYPE string_replace_mem(struct CharBuffer *string, size_t begin, size_t si
         if (other_size < size)
         {
             /* Shrinking */
-            string->p[new_size] = '\0';
+            string->p[new_size] = COMMON_L('\0');
             string->size = new_size;
         }
     }
@@ -201,153 +196,146 @@ ERROR_TYPE string_replace_mem(struct CharBuffer *string, size_t begin, size_t si
 
 #ifdef WIN32
 
-static ERROR_TYPE string_internal_to_wstring(const char *p, size_t size, wchar_t *wp, size_t *wsize) NODISCARD;
-static ERROR_TYPE string_internal_to_wstring(const char *p, size_t size, wchar_t *wp, size_t *wsize)
+ERROR_TYPE nstring_to_wstring(const nchar_t *np, size_t nsize, wchar_t *wp, size_t *wsize)
 {
     *wsize = 0;
-    while (size > 0)
+    while (nsize > 0)
     {
         /* Decode UTF-8 */
-        const unsigned char *cast = (const unsigned char*)p;
-        const unsigned char c = *cast;
+        const unsigned int nc = (unsigned int)*np;
         size_t symbol_size;
         unsigned int code;
-        if ((c & 0x80) == 0)
+        if ((nc & 0x80) == 0)
         {
+            code = nc;
             symbol_size = 1;
-            code = c;
         }
-        else if ((c & 0xE0) == 0xC0)
+        else if ((nc & 0xE0) == 0xC0)
         {
-            ARET(ERR_CODEC, size >= 2 && (cast[1] & 0xC0) == 0x80);
+            ARET(nsize >= 2 && ((unsigned int)np[1] & 0xC0) == 0x80);
+            code = (unsigned int)(((nc & 0x1F) << 6) | ((unsigned int)np[1] & 0x3F));
             symbol_size = 2;
-            code = (unsigned int)(((c & 0x1F) << 6) | (cast[1] & 0x3F));
         }
-        else if ((c & 0xF0) == 0xE0)
+        else if ((nc & 0xF0) == 0xE0)
         {
-            ARET(ERR_CODEC, size >= 3 && (cast[1] & 0xC0) == 0x80 && (cast[2] & 0xC0) == 0x80);
+            ARET(nsize >= 3 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80);
+            code = (unsigned int)(((nc & 0x0F) << 12) | (((unsigned int)np[1] & 0x3F) << 6) | ((unsigned int)np[2] & 0x3F));
             symbol_size = 3;
-            code = (unsigned int)(((c & 0x0F) << 12) | ((cast[1] & 0x3F) << 6) | (cast[2] & 0x3F));
         }
-        else if ((c & 0xF8) == 0xF0)
+        else if ((nc & 0xF8) == 0xF0)
         {
-            ARET(ERR_CODEC, size >= 4 && (cast[1] & 0xC0) == 0x80 && (cast[2] & 0xC0) == 0x80 && (cast[3] & 0xC0) == 0x80);
+            ARET(nsize >= 4 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80 && ((unsigned int)np[3] & 0xC0) == 0x80);
+            code = (unsigned int)(((nc & 0x07) << 18) | (((unsigned int)np[1] & 0x3F) << 12) | (((unsigned int)np[2] & 0x3F) << 6) | ((unsigned int)np[3] & 0x3F));
             symbol_size = 4;
-            code = (unsigned int)(((c & 0x07) << 18) | ((cast[1] & 0x3F) << 12) | ((cast[2] & 0x3F) << 6) | (cast[3] & 0x3F));
         }
-        else RET0(ERR_CODEC, "Invalid UTF-8 symbol");
-        p += symbol_size;
-        size -= symbol_size;
+        else RET0("Invalid UTF-8 symbol");
+        np += symbol_size;
+        nsize -= symbol_size;
 
-        /* Encode UTF-16 */
-        ARET(ERR_CODEC, code < 0xE000 || (code >= 0xD800 && code < 0x110000));
-        if (code < 0x10000)
+        if (sizeof(wchar_t) > 2)
         {
+            /* Encode UTF-32 */
             if (wp != NULL) *wp = (wchar_t)code;
             symbol_size = 1;
         }
         else
         {
-            if (wp != NULL)
+            /* Encode UTF-16 */
+            ARET(code < 0xE000 || (code >= 0xD800 && code < 0x110000));
+            if (code < 0x10000)
             {
-                wp[0] = ((code - 0x10000) >> 10) & 0x3FF;
-                wp[1] = (code - 0x10000) & 0x3FF;
+                if (wp != NULL) *wp = (wchar_t)code;
+                symbol_size = 1;
             }
-            symbol_size = 2;
+            else
+            {
+                if (wp != NULL)
+                {
+                    wp[0] = ((code - 0x10000) >> 10) & 0x3FF;
+                    wp[1] = (code - 0x10000) & 0x3FF;
+                }
+                symbol_size = 2;
+            }
         }
         if (wp != NULL) wp += symbol_size;
-        *wsize += symbol_size;
+        *wsize += 1;
     }
     ERROR_RETURN_OK();
 }
 
-static ERROR_TYPE string_internal_to_string(const wchar_t *wp, size_t wsize, char *p, size_t *size) NODISCARD;
-static ERROR_TYPE string_internal_to_string(const wchar_t *wp, size_t wsize, char *p, size_t *size)
+ERROR_TYPE wstring_to_nstring(const wchar_t *wp, size_t wsize, nchar_t *np, size_t *nsize)
 {
-    *size = 0;
+    *nsize = 0;
     while (wsize > 0)
     {
-        /* Decode UTF-16 */
-        size_t symbol_size;
+        const unsigned int wc = (unsigned int)*wp;
         unsigned int code;
-        unsigned char *cast = (unsigned char*)p;
-        if (!((unsigned int)*wp >= 0xD800 && (unsigned int)*wp < 0xE000))
+        size_t symbol_size;
+        if (sizeof(wchar_t) > 2)
         {
-            code = (unsigned int)*wp;
+            /* Decode UTF-32 */
+            code = wc;
             symbol_size = 1;
         }
-        else if ((unsigned int)*wp >= 0xD800 && (unsigned int)*wp < 0xDC00)
+        else
         {
-            ARET(ERR_CODEC, wsize >= 2 && ((unsigned int)wp[1] >= 0xDC00 && (unsigned int)wp[1] < 0xE000));
-            code = ((((unsigned int)*wp - 0xD800) << 10) | ((unsigned int)wp[1] - 0xDC00)) + 0x10000;
-            symbol_size = 2;
+            /* Decode UTF-16 */
+            if (!(wc >= 0xD800 && wc < 0xE000))
+            {
+                code = (unsigned int)*wp;
+                symbol_size = 1;
+            }
+            else if (wc >= 0xD800 && wc < 0xDC00)
+            {
+                ARET(wsize >= 2 && ((unsigned int)wp[1] >= 0xDC00 && (unsigned int)wp[1] < 0xE000));
+                code = (((wc - 0xD800) << 10) | ((unsigned int)wp[1] - 0xDC00)) + 0x10000;
+                symbol_size = 2;
+            }
+            else RET0("Invalid UTF-16 symbol");
         }
-        else RET0("Invalid UTF-16 symbol");
         wp += symbol_size;
         wsize -= symbol_size;
 
         /* Encode UTF-8 */
-        ARET(ERR_CODEC, code < 0x110000);
+        ARET(code < 0x110000);
         if (code < 0x80)
         {
-            if (cast != NULL) *cast = (unsigned char)code;
+            if (np != NULL) *np = (nchar_t)code;
             symbol_size = 1;
         }
         else if (code < 0x800)
         {
-            if (cast != NULL)
+            if (np != NULL)
             {
-                cast[0] = (unsigned char)(0xC0 | ((code >> 6) & 0x1F));
-                cast[1] = (unsigned char)(0x80 | (code & 0x3F));
+                np[0] = (nchar_t)(0xC0 | ((code >> 6) & 0x1F));
+                np[1] = (nchar_t)(0x80 | (code & 0x3F));
             }
             symbol_size = 2;
         }
         else if (code < 0x10000)
         {
-            if (cast != NULL)
+            if (np != NULL)
             {
-                cast[0] = (unsigned char)(0xE0 | ((code >> 12) & 0x0F));
-                cast[1] = (unsigned char)(0x80 | ((code >> 6) & 0x3F));
-                cast[2] = (unsigned char)(0x80 | (code & 0x3F));
+                np[0] = (nchar_t)(0xE0 | ((code >> 12) & 0x0F));
+                np[1] = (nchar_t)(0x80 | ((code >> 6) & 0x3F));
+                np[2] = (nchar_t)(0x80 | (code & 0x3F));
             }
             symbol_size = 3;
         }
         else
         {
-            if (cast != NULL)
+            if (np != NULL)
             {
-                cast[0] = (unsigned char)(0xE0 | ((code >> 18) & 0x07));
-                cast[1] = (unsigned char)(0x80 | ((code >> 12) & 0x3F));
-                cast[2] = (unsigned char)(0x80 | ((code >> 6) & 0x3F));
-                cast[3] = (unsigned char)(0x80 | (code & 0x3F));
+                np[0] = (nchar_t)(0xE0 | ((code >> 18) & 0x07));
+                np[1] = (nchar_t)(0x80 | ((code >> 12) & 0x3F));
+                np[2] = (nchar_t)(0x80 | ((code >> 6) & 0x3F));
+                np[3] = (nchar_t)(0x80 | (code & 0x3F));
             }
             symbol_size = 4;
         }
-        if (p != NULL) p += symbol_size;
-        *size += symbol_size;
+        if (np != NULL) np += symbol_size;
+        *nsize += symbol_size;
     }
-    ERROR_RETURN_OK();
-}
-
-ERROR_TYPE string_to_wstring(struct WCharBuffer *wstring, const struct CharBuffer *string) NODISCARD
-{
-    size_t wsize;
-    PRET(string_internal_to_wstring(string->p, string->size, NULL, &wsize));
-    PRET(wchar_buffer_resize(wstring, wsize + 1));
-    PIGNORE(string_internal_to_wstring(string->p, string->size, wstring->p, &wsize));
-    wstring->size = wsize;
-    wstring->p[wsize] = '\0';
-    ERROR_RETURN_OK();
-}
-
-ERROR_TYPE string_to_string(struct CharBuffer *string, const struct WCharBuffer *wstring) NODISCARD
-{
-    size_t size;
-    PRET(string_internal_to_string(wstring->p, wstring->size, NULL, &size));
-    PRET(char_buffer_resize(string, size + 1));
-    PIGNORE(string_internal_to_string(wstring->p, wstring->size, string->p, &size));
-    string->size = size;
-    string->p[size] = '\0';
     ERROR_RETURN_OK();
 }
 

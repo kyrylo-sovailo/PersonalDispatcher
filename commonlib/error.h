@@ -1,30 +1,29 @@
 #ifndef COMMONLIB_ERROR_H
 #define COMMONLIB_ERROR_H
 
-/* Module was modified to remove ERROR_TRACE and ERROR_PRINT, and return error code */
-
 #include "bool.h"
+#include "char.h"
 #include "macro.h"
 
 /*#define ERROR_EMBED_ARGUMENTS*/ /* Store file and line as a part of the message (increases file size) */
 #define ERROR_INCLUDE_EXPRESSION /* Include boolean expression in the trace */
 
 #ifdef ERROR_EMBED_ARGUMENTS
-    #define ERROR_FORMAT() __BASENAME_FILE__ ":" ERROR_STRINGIZE_LINE ": Error"
-    #define ERROR_FORMAT_F(FORMAT) __BASENAME_FILE__ ":" ERROR_STRINGIZE_LINE ": Message: " FORMAT
+    #define ERROR_FORMAT() COMMON_L(__RELATIVE_FILE__ ":" ERROR_STRINGIZE_LINE ": Error")
+    #define ERROR_FORMAT_F(FORMAT) COMMON_L(__RELATIVE_FILE__ ":" ERROR_STRINGIZE_LINE ": Message: " FORMAT)
     #ifdef ERROR_INCLUDE_EXPRESSION
-        #define ERROR_FORMAT_E(EXPRESSION) __BASENAME_FILE__ ":" ERROR_STRINGIZE_LINE ": Condition `" EXPRESSION "' failed"
-        #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) __BASENAME_FILE__ ":" ERROR_STRINGIZE_LINE ": Condition `" EXPRESSION "' failed. Message: " FORMAT
+        #define ERROR_FORMAT_E(EXPRESSION) COMMON_L(__RELATIVE_FILE__ ":" ERROR_STRINGIZE_LINE ": Condition `" EXPRESSION "' failed")
+        #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) COMMON_L(__RELATIVE_FILE__ ":" ERROR_STRINGIZE_LINE ": Condition `" EXPRESSION "' failed. Message: " FORMAT)
     #else
         #define ERROR_FORMAT_E(EXPRESSION) ERROR_FORMAT()
         #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) ERROR_FORMAT_F(FORMAT)
     #endif
 #else
-    #define ERROR_FORMAT() "%s:%d: Error", __BASENAME_FILE__, __LINE__
-    #define ERROR_FORMAT_F(FORMAT) "%s:%d: Message: " FORMAT, __BASENAME_FILE__, __LINE__
+    #define ERROR_FORMAT() COMMON_S COMMON_L(":%d: Error"), COMMON_L(__RELATIVE_FILE__), __LINE__
+    #define ERROR_FORMAT_F(FORMAT) COMMON_S COMMON_L(":%d: Message: ") COMMON_L(FORMAT), COMMON_L(__RELATIVE_FILE__), __LINE__
     #ifdef ERROR_INCLUDE_EXPRESSION
-        #define ERROR_FORMAT_E(EXPRESSION) "%s:%d: Condition `%s' failed", __BASENAME_FILE__, __LINE__, EXPRESSION
-        #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) "%s:%d: Condition `%s' failed. Message: " FORMAT, __BASENAME_FILE__, __LINE__, EXPRESSION
+        #define ERROR_FORMAT_E(EXPRESSION) COMMON_S COMMON_L(":%d: Condition `") COMMON_S COMMON_L("' failed"), COMMON_L(__RELATIVE_FILE__), __LINE__, COMMON_L(EXPRESSION)
+        #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) COMMON_S COMMON_L(":%d: Condition `") COMMON_S COMMON_L("' failed. Message: ") COMMON_L(FORMAT), COMMON_L(__RELATIVE_FILE__), __LINE__, COMMON_L(EXPRESSION)
     #else
         #define ERROR_FORMAT_E(EXPRESSION) ERROR_FORMAT()
         #define ERROR_FORMAT_EF(EXPRESSION, FORMAT) ERROR_FORMAT_F(FORMAT)
@@ -85,6 +84,6 @@
 #define PIGNORE(EXPRESSION) { EXPRESSION; }
 
 /* Prints error and dies */
-void error_print_die(int code, const char *format, ...) NORETURN PRINTFLIKE(2, 3);
+void error_print_die(int code, const cchar_t *format, ...) NORETURN PRINTFLIKE(2, 3);
 
 #endif

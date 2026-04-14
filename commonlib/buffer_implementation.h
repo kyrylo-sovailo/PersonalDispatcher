@@ -3,6 +3,12 @@
 
 #include "buffer.h"
 
+#define IMPLEMENT_BUFFER_INITIALIZE(TYPE, STRUCT_NAME, FUNCTION_NAME) \
+void FUNCTION_NAME ## initialize(struct STRUCT_NAME *buffer) \
+{ \
+    generic_buffer_initialize(buffer); \
+}
+
 #define IMPLEMENT_BUFFER_FINALIZE(TYPE, STRUCT_NAME, FUNCTION_NAME) \
 void FUNCTION_NAME ## finalize(struct STRUCT_NAME *buffer) \
 { \
@@ -70,6 +76,7 @@ ERROR_TYPE FUNCTION_NAME ## push(struct STRUCT_NAME *buffer, TYPE data) \
     ERROR_RETURN_VERBATIM(); \
 }
 
+void generic_buffer_initialize(void *buffer);
 void generic_buffer_finalize(void *buffer);
 
 ERROR_TYPE generic_buffer_resize_1(void *buffer, size_t size);

@@ -17,14 +17,14 @@ empty path is a valid relative path, equivalent to .
 */
 
 /* Appends file name to path, while also caring about slashes and parent directories */
-ERROR_TYPE path_append_mem(struct CharBuffer *path, const char *other, size_t other_size) NODISCARD;
+ERROR_TYPE path_append_mem(struct CharBuffer *path, const cchar_t *other, size_t other_size) NODISCARD;
 
 /* Returns whether the path is absolute */
-bool path_absolute_mem(const char *path, size_t path_size);
+bool path_absolute_mem(const cchar_t *path, size_t path_size);
 
 /* Gets current working directory */
 ERROR_TYPE path_get_working_directory(struct CharBuffer *path) NODISCARD;
 /* Gets directory of the path (directory == path is allowed) */
-bool path_get_directory(struct CharBuffer *directory, const struct CharBuffer *path, bool append_dotdot_if_dotdot) NODISCARD; /* Modified */ 
+bool path_get_directory(struct CharBuffer *directory, const struct CharBuffer *path, bool append_dotdot_if_dotdot) NODISCARD;
 
 #endif
