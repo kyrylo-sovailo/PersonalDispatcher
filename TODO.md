@@ -14,4 +14,4 @@
  - [X] help
  - [X] version
  - [X] Port to commonlib
- - [ ] Add 'which' command
+ - [X] Add 'which' command

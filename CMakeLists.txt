@@ -2,8 +2,8 @@
 cmake_minimum_required(VERSION 3.10)
 project(PersonalDispatcher LANGUAGES C)
 
-    add_compile_options(-ffunction-sections -fdata-sections)
-    add_link_options(-Wl,--gc-sections,--print-gc-sections)
+    #add_compile_options(-ffunction-sections -fdata-sections)
+    #add_link_options(-Wl,--gc-sections,--print-gc-sections)
 
 # Compiler identification
 set(COMPILER "${CMAKE_C_COMPILER_ID}")

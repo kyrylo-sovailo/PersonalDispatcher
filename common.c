@@ -36,7 +36,7 @@
 /* Needed by kpd_read_target */
 static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
 {
-    const char *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
+    const cchar_t *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
     enum Priority priority_i;
 
     /* Empty lines */
@@ -58,7 +58,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     entry->priority_explicit = false;
     for (priority_i = 0; priority_i < 4; priority_i++)
     {
-        char *marker_found = strstr(line->p, markers[priority_i]);
+        cchar_t *marker_found = strstr(line->p, markers[priority_i]);
         if (marker_found != NULL)
         {
             /* Remove marker */
@@ -108,7 +108,7 @@ static unsigned int get_marker_length(bool done, enum Priority priority)
 }
 
 /* Needed by kpd_parse_number */
-static bool kpd_parse_number_post_number(const char **current_string)
+static bool kpd_parse_number_post_number(const cchar_t **current_string)
 {
     switch (**current_string)
     {
@@ -125,10 +125,10 @@ static bool kpd_parse_number_post_number(const char **current_string)
     }
 }
 
-static bool kpd_parse_number_post_hyphen(const char **current_string, char *mask, size_t mask_size, bool begin_read, size_t begin)
+static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t *mask, size_t mask_size, bool begin_read, size_t begin)
 {
     size_t end;
-    char *next_string;
+    cchar_t *next_string;
 
     /* Try to read number */
     end = strtoul(*current_string, &next_string, 10);
@@ -224,7 +224,7 @@ static void kpd_print_string(const char *string, const char *highlight)
     }
 }
 
-void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
+void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool relative)
 {
     struct CharBuffer local_path = ZERO_INIT, line = ZERO_INIT;
     size_t steps, entry_number;
@@ -264,7 +264,7 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path)
     }
 
     /* Make relative path */
-    if (path != NULL)
+    if (path != NULL && relative)
     {
         string_zero(&local_path);
         if (steps == 0)
@@ -492,6 +492,13 @@ bool kpd_resolve_commit(const char *commit_string)
     const size_t commit_length = strlen(commit_string);
     const size_t only_option_length = strlen("commit");
     return commit_length <= only_option_length && memcmp(commit_string, "commit", commit_length) == 0;
+}
+
+bool kpd_resolve_relative(const char *relative_string)
+{
+    const size_t relative_length = strlen(relative_string);
+    const size_t only_option_length = strlen("relative");
+    return relative_length <= only_option_length && memcmp(relative_string, "relative", relative_length) == 0;
 }
 
 void kpd_invoke_git(const char *path, const char *commit_message)

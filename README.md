@@ -52,6 +52,7 @@ Commands:
   sort      [<status>]                  List entries sorted by priority (default command)
   next                                  Print next task
   test                                  Check if TODO.md exists and has the correct format
+  which     [relative]                  Show the location of TODO.md
   find      <description>
             [<status>] [<action>]       Find task by description and execute command
 

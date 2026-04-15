@@ -34,8 +34,8 @@ CCHAR = common character    (exists everywhere, defined differently)
     #define COMMON_L(TEXT) TEXT
     #define COMMON_C "%c"
     #define COMMON_S "%s"
-    #define COMMON_SEPARATOR '\\'
-    #define COMMON_SEPARATOR_STR "\\"
+    #define COMMON_SEPARATOR '/'
+    #define COMMON_SEPARATOR_STR "/"
 #endif
 
 #endif

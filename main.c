@@ -1,3 +1,5 @@
+#include "commonlib/char_buffer.h"
+#include "commonlib/output.h"
 #include "kpd.h"
 #include "commonlib/string.h"
 #include "commonlib/path.h"
@@ -147,7 +149,7 @@ static int kpd_add(int argc, char **argv)
     }
 
     /* Read -> Modify entries -> Print modified entries -> [Write] */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     entries_resize(&entries, entries.size + 1);
     entry.number = entries.size - 1;
     entries.p[entry.number] = entry;
@@ -186,7 +188,7 @@ static int kpd_priority(int argc, char **argv)
     }
 
     /* Read -> Modify entries -> Print modified entries -> [Write] */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     changes = kpd_priority_f(&entries, mask, priority, priority_explicit);
     kpd_print_entries(&entries, NULL, mask);
@@ -237,7 +239,7 @@ static int kpd_edit(int argc, char **argv)
     }
 
     /* Read -> [Description dialog] -> Modify entries -> Print modified entries -> [Write] */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     if (description.p == NULL) kpd_edit_dialog(&entries, mask, &description);
     changes = kpd_edit_f(&entries, mask, description.p);
@@ -294,7 +296,7 @@ static int kpd_commit(int argc, char **argv)
     }
 
     /* Read -> Print entries -> [Commit dialog] -> Commit */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : kpd_create_mask_highest_open(&entries);
     kpd_print_entries(&entries, NULL, mask);
     if (commit_message.p == NULL) kpd_commit_dialog(&entries, mask, &commit_message, ACT_DONE);
@@ -349,7 +351,7 @@ static int kpd_remove_or_done_or_undo(int argc, char **argv, enum Action action)
     }
 
     /* Read -> ... */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     mask = (number_string != NULL) ? kpd_create_mask(entries.size, number_string) : (
         (action != ACT_UNDO) ? kpd_create_mask_highest_open(&entries) : kpd_create_mask_last_closed(&entries)
     );
@@ -503,7 +505,7 @@ static int kpd_find(int argc, char **argv)
     if (action == ACT_COMMIT) { action = ACT_NONE; commit_suffix = true; }
 
     /* Read -> ... */
-    kpd_read_target(&entries, &path);
+    kpd_read_target(&entries, &path, true);
     mask = malloc(entries.size);
     if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
     for (entry_i = entries.p, mask_i = mask; entry_i < entries.p + entries.size; entry_i++, mask_i++)
@@ -588,7 +590,7 @@ static int kpd_list(int argc, char **argv)
     }
 
     /* Read -> Print entries */
-    kpd_read_target(&entries, NULL);
+    kpd_read_target(&entries, NULL, true);
     if (status != STA_ALL || priority_explicit)
     {
         const struct Entry *entry_i;
@@ -625,7 +627,7 @@ static int kpd_sort(int argc, char **argv)
     }
 
     /* Read -> Modify entries -> Print modified entries */
-    kpd_read_target(&entries, NULL);
+    kpd_read_target(&entries, NULL, true);
     entries_sort(&entries);
     mask = malloc(entries.size);
     if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
@@ -653,7 +655,7 @@ static int kpd_next(int argc, char **argv)
     if (argc > 0) error_print_die(ERR_USAGE, "too many arguments");
 
     /* Read -> Print entries */
-    kpd_read_target(&entries, NULL);
+    kpd_read_target(&entries, NULL, true);
     if (!entries_highest_open(&highest_index, &entries)) printf("Nothing to do\n");
     else kpd_print_entry(&entries.p[highest_index], NULL, 0, 0);
 
@@ -669,9 +671,31 @@ static int kpd_test(int argc, char **argv)
     if (argc > 0) error_print_die(ERR_USAGE, "too many arguments");
 
     /* Read -> Print */
-    kpd_read_target(NULL, NULL);
+    kpd_read_target(NULL, NULL, true);
     printf("All correct\n");
 
+    return ERR_OK;
+}
+
+static int kpd_which(int argc, char **argv)
+{
+    bool relative = false;
+    struct CharBuffer path = ZERO_INIT;
+
+    /* Parse options */
+    if (argc > 2) error_print_die(ERR_USAGE, "too many arguments");
+    if (argc == 1)
+    {
+        if (!kpd_resolve_relative(argv[0])) error_print_die(ERR_USAGE, "'%s' is not a valid 'relative' suffix", argv[0]);
+        relative = true;
+    }
+
+    /* Read -> Print */
+    kpd_read_target(NULL, &path, relative);
+    printf("%s\n", string_get(&path));
+
+    /* Cleanup */
+    string_finalize(&path);
     return ERR_OK;
 }
 
@@ -715,6 +739,7 @@ static int kpd_help(int argc, char **argv)
     printf("  sort      [<status>]                  List entries sorted by priority (default command)\n");
     printf("  next                                  Print next task\n");
     printf("  test                                  Check if TODO.md exists and has the correct format\n");
+    printf("  which     [relative]                  Show the location of TODO.md\n");
     printf("  find      <description>\n");
     printf("            [<status>] [<action>]       Find task by description and execute command\n");
     printf("\n");
@@ -742,7 +767,9 @@ static int kpd_version(int argc, char **argv)
 int main(int argc, char **argv)
 {
     const char *option_string;
-
+    int code;
+    
+    output_module_initialize();
     if (argc <= 1)
     {
         /* No arguments */
@@ -753,8 +780,8 @@ int main(int argc, char **argv)
         /* Auxiliary arguments */
         if (argc != 2) error_print_die(ERR_USAGE, "too many options");
         option_string = argv[1];
-        if (strcmp(option_string, "-h") == 0 || strcmp(option_string, "--help") == 0) return kpd_help(0, NULL);
-        else if (strcmp(option_string, "-v") == 0 || strcmp(option_string, "--version") == 0) return kpd_version(0, NULL);
+        if (strcmp(option_string, "-h") == 0 || strcmp(option_string, "--help") == 0) code = kpd_help(0, NULL);
+        else if (strcmp(option_string, "-v") == 0 || strcmp(option_string, "--version") == 0) code = kpd_version(0, NULL);
         else error_print_die(ERR_USAGE, "'%s' is not a valid option", option_string);
     }
     else
@@ -764,14 +791,14 @@ int main(int argc, char **argv)
         {
             kpd_init, kpd_add,
             kpd_priority, kpd_edit, kpd_commit, kpd_remove, kpd_done, kpd_undo,
-            kpd_find, kpd_list, kpd_sort, kpd_next, kpd_test,
+            kpd_find, kpd_list, kpd_sort, kpd_next, kpd_test, kpd_which,
             kpd_help, kpd_version
         };
         const char *command_strings[] =
         {
             "init", "add",
             "priority", "edit", "commit", "remove", "done", "undo",
-            "find", "list", "sort", "next", "test",
+            "find", "list", "sort", "next", "test", "which",
             "help", "version"
         };
         const char *command_string = argv[1];
@@ -780,7 +807,8 @@ int main(int argc, char **argv)
         if (!string_resolve(&command_index, command_string, command_strings, sizeof(command_strings)/sizeof(*command_strings)))
             error_print_die(ERR_USAGE, "'%s' is not a valid command", command_string);
         command = commands[command_index];
-        if (command != NULL) return command(argc - 2, argv + 2);
+        code = command(argc - 2, argv + 2);
     }
-    return 0;
+    output_module_finalize();
+    return code;
 }

@@ -92,7 +92,7 @@ DECLARE_BUFFER(struct Entry, EntryBuffer)
 
 /* common.c */
 /* Reads entries from TODO.md into buffer, returns open FILE* (buffer may be NULL) */
-void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path);
+void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool relative);
 /* Writes entries to the open FILE* */
 void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer *path);
 /* Prints entry to stdout (max_length/max_marker_length are zero for no spaces) */
@@ -115,6 +115,8 @@ bool kpd_resolve_status(enum Status *status, const char *status_string);
 bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
 /* Returns if string can be resolved as 'commit' */
 bool kpd_resolve_commit(const char *commit_string);
+/* Returns if string can be resolved as 'relative' */
+bool kpd_resolve_relative(const char *relative_string);
 /* Invokes git */
 void kpd_invoke_git(const char *path, const char *commit_message);
 
