@@ -40,14 +40,18 @@ CCHAR = common character    (exists everywhere, defined differently)
 #define COMMON_E COMMON_L("")
 
 #define COMMON_C COMMON_L("%") COMMON_LONG COMMON_L("c")        /* %c or %lc */
-#define COMMON_NC COMMON_L("%.*") COMMON_LONG COMMON_L("c")     /* %.*c or %.*lc */
-#define COMMON_QC COMMON_L("'%") COMMON_LONG COMMON_L("c'")     /* '%.*c' or '%.*lc' */
-#define COMMON_QQC COMMON_L("\"%") COMMON_LONG COMMON_L("c\"")  /* "%.*c" or "%.*lc" */
+#define COMMON_WC COMMON_L("%*") COMMON_LONG COMMON_L("c")      /* %*c or %*lc */
+#define COMMON_PC COMMON_L("%.*") COMMON_LONG COMMON_L("c")     /* %.*c or %.*lc */
+#define COMMON_WPC COMMON_L("%*.*") COMMON_LONG COMMON_L("c")   /* %*.*c or %*.*lc */
+#define COMMON_QC COMMON_L("'%") COMMON_LONG COMMON_L("c'")     /* '%c' or '%lc' */
+#define COMMON_QQC COMMON_L("\"%") COMMON_LONG COMMON_L("c\"")  /* "%c" or "%lc" */
 
 #define COMMON_S COMMON_L("%") COMMON_LONG COMMON_L("s")        /* %s or %ls */
-#define COMMON_NS COMMON_L("%.*") COMMON_LONG COMMON_L("s")     /* %.*s or %.*ls */
-#define COMMON_QS COMMON_L("'%") COMMON_LONG COMMON_L("s'")     /* '%.*s' or '%.*ls' */
-#define COMMON_QQS COMMON_L("\"%") COMMON_LONG COMMON_L("s\"")  /* "%.*s" or "%.*ls" */
+#define COMMON_WS COMMON_L("%*") COMMON_LONG COMMON_L("s")      /* %*s or %*ls */
+#define COMMON_PS COMMON_L("%.*") COMMON_LONG COMMON_L("s")     /* %.*s or %.*ls */
+#define COMMON_WPS COMMON_L("%*.*") COMMON_LONG COMMON_L("s")   /* %*.*s or %*.*ls */
+#define COMMON_QS COMMON_L("'%") COMMON_LONG COMMON_L("s'")     /* '%s' or '%ls' */
+#define COMMON_QQS COMMON_L("\"%") COMMON_LONG COMMON_L("s\"")  /* "%s" or "%ls" */
 
 #define COMMON_S2(STRING1, STRING2) COMMON_L(STRING1) COMMON_S COMMON_L(STRING2)
 #define COMMON_S3(STRING1, STRING2, STRING3) COMMON_L(STRING1) COMMON_S COMMON_L(STRING2) COMMON_S COMMON_L(STRING3)

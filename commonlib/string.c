@@ -93,6 +93,25 @@ ERROR_TYPE string_resize(struct CharBuffer *string, size_t size)
     ERROR_RETURN_OK();
 }
 
+#ifdef COMMON_WCHAR
+ERROR_TYPE nstring_resize(struct NCharBuffer *string, size_t size)
+{
+    if (size + 1 > string->capacity)
+    {
+        nchar_t *new_p;
+        size_t new_capacity = (string->capacity == 0) ? 1 : string->capacity;
+        while (size + 1 > new_capacity) new_capacity *= 2;
+        new_p = (nchar_t*)realloc(string->p, new_capacity * sizeof(*string->p));
+        ARET(ERR_MALLOC, new_p != NULL);
+        string->capacity = new_capacity;
+        string->p = new_p;
+    }
+    string->size = size;
+    string->p[size] = '\0';
+    ERROR_RETURN_OK();
+}
+#endif
+
 ERROR_TYPE string_reserve(struct CharBuffer *string, size_t capacity)
 {
     if (capacity + 1 > string->capacity)
@@ -370,7 +389,7 @@ ERROR_TYPE string_internal_vprint_append(struct CharBuffer *string, bool suppres
                 format = end;
             }
         }
-        if (precision_present) format_copy[++format_copy_size] = COMMON_L('*');
+        if (precision_present) { format_copy[++format_copy_size] = COMMON_L('.'); format_copy[++format_copy_size] = COMMON_L('*'); }
 
         /* Parse length */
         switch (*format)
@@ -421,8 +440,7 @@ ERROR_TYPE string_internal_vprint_append(struct CharBuffer *string, bool suppres
         else if (specifier == COMMON_L('s') && length == LENGTH_NONE)
         {
             const nchar_t *value = va_arg(va, const nchar_t*);
-            const size_t value_length = strlen(value);
-            size_t estimated_size = value_length;
+            size_t estimated_size = precision_present ? precision : strlen(value);
             if (width_present && width > estimated_size) estimated_size = width;
             SOFT_ARET(ERR_MALLOC, string_vprint_append_internal_reserve(string, estimated_size));
             if (width_and_precision_present) printed = COMMON_SW(printf(END(string), format_copy, width, precision, value)); /* TODO: implement re-encoding for cchar_t == wchar_t */
@@ -433,8 +451,7 @@ ERROR_TYPE string_internal_vprint_append(struct CharBuffer *string, bool suppres
         else if (specifier == COMMON_L('s') && length == LENGTH_LONG)
         {
             const wchar_t *value = va_arg(va, const wchar_t*);
-            const size_t value_length = wcslen(value);
-            size_t estimated_size = value_length;
+            size_t estimated_size = precision_present ? precision : wcslen(value);
             if (width_present && width > estimated_size) estimated_size = width;
             SOFT_ARET(ERR_MALLOC, string_vprint_append_internal_reserve(string, estimated_size));
             if (width_and_precision_present) printed = COMMON_SW(printf(END(string), format_copy, width, precision, value)); /* TODO: implement re-encoding for cchar_t == nchar_t */
@@ -746,23 +763,23 @@ ERROR_TYPE nstring_to_wstring(const nchar_t *np, size_t nsize, wchar_t *wp, size
         }
         else if ((nc & 0xE0) == 0xC0)
         {
-            ARET(nsize >= 2 && ((unsigned int)np[1] & 0xC0) == 0x80);
+            ARET(ERR_CODEC, nsize >= 2 && ((unsigned int)np[1] & 0xC0) == 0x80);
             code = (unsigned int)(((nc & 0x1F) << 6) | ((unsigned int)np[1] & 0x3F));
             symbol_size = 2;
         }
         else if ((nc & 0xF0) == 0xE0)
         {
-            ARET(nsize >= 3 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80);
+            ARET(ERR_CODEC, nsize >= 3 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80);
             code = (unsigned int)(((nc & 0x0F) << 12) | (((unsigned int)np[1] & 0x3F) << 6) | ((unsigned int)np[2] & 0x3F));
             symbol_size = 3;
         }
         else if ((nc & 0xF8) == 0xF0)
         {
-            ARET(nsize >= 4 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80 && ((unsigned int)np[3] & 0xC0) == 0x80);
+            ARET(ERR_CODEC, nsize >= 4 && ((unsigned int)np[1] & 0xC0) == 0x80 && ((unsigned int)np[2] & 0xC0) == 0x80 && ((unsigned int)np[3] & 0xC0) == 0x80);
             code = (unsigned int)(((nc & 0x07) << 18) | (((unsigned int)np[1] & 0x3F) << 12) | (((unsigned int)np[2] & 0x3F) << 6) | ((unsigned int)np[3] & 0x3F));
             symbol_size = 4;
         }
-        else RET0("Invalid UTF-8 symbol");
+        else RET0(ERR_CODEC, "Invalid UTF-8 symbol");
         np += symbol_size;
         nsize -= symbol_size;
 
@@ -775,7 +792,7 @@ ERROR_TYPE nstring_to_wstring(const nchar_t *np, size_t nsize, wchar_t *wp, size
         else
         {
             /* Encode UTF-16 */
-            ARET(code < 0xE000 || (code >= 0xD800 && code < 0x110000));
+            ARET(ERR_CODEC, code < 0xE000 || (code >= 0xD800 && code < 0x110000));
             if (code < 0x10000)
             {
                 if (wp != NULL) *wp = (wchar_t)code;
@@ -821,17 +838,17 @@ ERROR_TYPE wstring_to_nstring(const wchar_t *wp, size_t wsize, nchar_t *np, size
             }
             else if (wc >= 0xD800 && wc < 0xDC00)
             {
-                ARET(wsize >= 2 && ((unsigned int)wp[1] >= 0xDC00 && (unsigned int)wp[1] < 0xE000));
+                ARET(ERR_CODEC, wsize >= 2 && ((unsigned int)wp[1] >= 0xDC00 && (unsigned int)wp[1] < 0xE000));
                 code = (((wc - 0xD800) << 10) | ((unsigned int)wp[1] - 0xDC00)) + 0x10000;
                 symbol_size = 2;
             }
-            else RET0("Invalid UTF-16 symbol");
+            else RET0(ERR_CODEC, "Invalid UTF-16 symbol");
         }
         wp += symbol_size;
         wsize -= symbol_size;
 
         /* Encode UTF-8 */
-        ARET(code < 0x110000);
+        ARET(ERR_CODEC, code < 0x110000);
         if (code < 0x80)
         {
             if (np != NULL) *np = (nchar_t)code;

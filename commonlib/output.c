@@ -1,5 +1,6 @@
 #include "output.h"
 #include "string.h"
+#include "../kpd.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -111,7 +112,7 @@ void output_vprint(bool error_output, const cchar_t *format, va_list va)
                 size_t string_size;
                 PGOTO(wstring_to_nstring(string_get(&buffer), buffer.size + 1, NULL, &string_size));
                 string = (nchar_t*)malloc(string_size);
-                AGOTO(string != NULL);
+                AGOTO(ERR_MALLOC, string != NULL);
                 PGOTO(wstring_to_nstring(string_get(&buffer), buffer.size + 1, string, &string_size));
                 WriteFile(info->handle, string, (DWORD)string_size - 1, NULL, NULL);
                 free(string);

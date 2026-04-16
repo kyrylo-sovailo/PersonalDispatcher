@@ -18,6 +18,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef COMMON_WCHAR
+    #include <wchar.h>
+#endif
 
 /* Needed by kpd_read_target */
 static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
@@ -36,7 +39,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     || line->p[3] != '['
     || (line->p[4] != ' ' && line->p[4] != 'X')
     || line->p[5] != ']'
-    || line->p[6] != ' ') error_print_die(ERR_FORMAT, "invalid line '" COMMON_S COMMON_L("'"), line->p);
+    || line->p[6] != ' ') error_print_die(ERR_FORMAT, COMMON_S2("invalid line '", "'"), line->p);
     entry->done = line->p[4] == 'X';
     
     /* Parse priority */
@@ -111,13 +114,13 @@ static bool kpd_parse_number_post_number(const cchar_t **current_string)
     }
 }
 
-static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t *mask, size_t mask_size, bool begin_read, size_t begin)
+static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, char *mask, size_t mask_size, bool begin_read, size_t begin)
 {
     size_t end;
     cchar_t *next_string;
 
     /* Try to read number */
-    end = strtoul(*current_string, &next_string, 10);
+    end = COMMON_WCS(toul(*current_string, &next_string, 10));
     if (next_string == *current_string && !begin_read)
     {
         /* No number read and 'begin' was not yet read */
@@ -135,9 +138,9 @@ static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t
             /* Number read */
             *current_string = next_string;
             if (begin_read && begin > end) return false;
-            if (mask != NULL && (end == 0 || end > mask_size)) error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
+            if (mask != NULL && (end == 0 || end > mask_size)) error_print_die(ERR_USAGE, COMMON_L("'%u' is out of range"), (unsigned int)end);
         }
-        if (mask != NULL) COMMON_W(memset(mask+(begin-1), '\1', end-(begin-1)));
+        if (mask != NULL) memset(mask+(begin-1), '\1', end-(begin-1));
         return kpd_parse_number_post_number(current_string);
     }
 }
@@ -146,7 +149,9 @@ static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t
 static void kpd_invoke(cchar_t *const *arguments)
 {
     cchar_t *const *argument_i;
-    int id;
+    #ifndef WIN32
+        int id;
+    #endif
 
     output_open(false);
     for (argument_i = &arguments[0]; *argument_i != NULL; argument_i++)
@@ -183,7 +188,7 @@ static void kpd_print_string(const cchar_t *string, const cchar_t *highlight)
 {
     const cchar_t *first_found = NULL, *previous_found = NULL;
     size_t highlight_length;
-    if (highlight == NULL) { printf("%s", string); return; }
+    if (highlight == NULL) { output_print(false, COMMON_S, string); return; }
 
     highlight_length = COMMON_WCS(len(highlight));
     while (true)
@@ -198,7 +203,7 @@ static void kpd_print_string(const cchar_t *string, const cchar_t *highlight)
             }
             else
             {
-                output_print_color(false, COMMON_RED, COMMON_NS, (int)(previous_found + highlight_length - first_found), first_found);
+                output_print_color(false, COMMON_RED, COMMON_PS, (int)(previous_found + highlight_length - first_found), first_found);
                 output_print(false, COMMON_S, previous_found + highlight_length);
             };
             break;
@@ -208,11 +213,11 @@ static void kpd_print_string(const cchar_t *string, const cchar_t *highlight)
             /* Entry does not intersect with the previous entry */
             if (previous_found == NULL)
             {
-                output_print(false, COMMON_NS, (int)(found - string), string);
+                output_print(false, COMMON_PS, (int)(found - string), string);
             }
             else
             {
-                output_print_color(false, COMMON_RED, COMMON_NS, (int)(previous_found + highlight_length - first_found), first_found);
+                output_print_color(false, COMMON_RED, COMMON_PS, (int)(previous_found + highlight_length - first_found), first_found);
             }
             first_found = found;
         }
@@ -229,6 +234,9 @@ static void kpd_print_string(const cchar_t *string, const cchar_t *highlight)
 void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool relative)
 {
     struct CharBuffer local_path = ZERO_INIT, line = ZERO_INIT;
+    #ifdef COMMON_WCHAR
+    struct NCharBuffer nline = ZERO_INIT;
+    #endif
     size_t steps, entry_number;
     FILE *file;
 
@@ -238,7 +246,6 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
     steps = 0;
     while (true)
     {
-        
         file = COMMON__W(fopen(local_path.p, COMMON_L("r+")));
         if (file != NULL) break;
         if (!path_get_directory(&local_path, &local_path, true) || !path_get_directory(&local_path, &local_path, true))
@@ -249,9 +256,20 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
 
     /* Parse TODO.md */
     entry_number = 0;
+    #ifdef COMMON_WCHAR
+    while (nstring_get_line(&nline, file))
+    #else
     while (string_get_line(&line, file))
+    #endif
     {
+        
         struct Entry entry = ZERO_INIT;
+        #ifdef COMMON_WCHAR
+            size_t size;
+            nstring_to_wstring(nline.p, nline.size + 1, NULL, &size);
+            string_resize(&line, size - 1);
+            nstring_to_wstring(nline.p, nline.size + 1, line.p, &size);
+        #endif
         entry.number = entry_number;
         if (!kpd_read_line(&entry, &line)) continue;
         if (entries == NULL)
@@ -269,21 +287,24 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
     /* Make relative path */
     if (path != NULL && relative)
     {
-        string_zero(&local_path);
         if (steps == 0)
         {
-            string_replace_mem(&local_path, 0, 0, TARGET, strlen(TARGET));
+            string_copy_mem(&local_path, COMMON_L(TARGET), strlen(TARGET));
         }
         else
         {
             size_t step_i;
+            string_zero(&local_path);
             for (step_i = 0; step_i < steps; step_i++) path_get_directory(&local_path, &local_path, true);
-            path_append_mem(&local_path, TARGET, strlen(TARGET));
+            path_append_mem(&local_path, COMMON_L(TARGET), strlen(TARGET));
         }
     }
 
     /* Cleanup */
-    string_finalize(&line);
+    char_buffer_finalize(&line);
+    #ifdef COMMON_WCHAR
+    nchar_buffer_finalize(&nline);
+    #endif
     fclose(file);
     if (path == NULL) string_finalize(&local_path);
     else *path = local_path;
@@ -333,7 +354,7 @@ void kpd_print_entry(const struct Entry *entry, const cchar_t *highlight, unsign
     const unsigned int number_length = get_number_length(number);
     const unsigned int number_spaces = (max_length == 0) ? 0 : (max_length - number_length);
 
-    const cchar_t* marker = entry->done ? COMMON_L("(done)") : markers[entry->priority];
+    const cchar_t *marker = entry->done ? COMMON_L("(done)") : markers[entry->priority];
     bool marker_use_color = entry->done ? true : marker_use_colors[entry->priority];
     const ccolor_t marker_color = entry->done ? COMMON_GREEN : marker_colors[entry->priority];
 
@@ -342,13 +363,10 @@ void kpd_print_entry(const struct Entry *entry, const cchar_t *highlight, unsign
     const unsigned int left_marker_spaces = (marker_spaces) / 2;
     const unsigned int right_marker_spaces = (marker_spaces + 1) / 2;
 
-    output_print(false, COMMON_L("%u.") COMMON_NS COMMON_L(" ") COMMON_NS,
-        (unsigned int)number,
-        number_spaces, COMMON_E,
-        left_marker_spaces, COMMON_E);
+    output_print(false, COMMON_L("%u.") COMMON_WS, (unsigned int)number, number_spaces + left_marker_spaces + 1, COMMON_E);
     if (marker_use_color) output_print_color(false, marker_color, COMMON_S, marker);
     else output_print(false, COMMON_S, marker);
-    output_print(false, COMMON_NS, right_marker_spaces, COMMON_E);
+    output_print(false, COMMON_WS, right_marker_spaces + 1, COMMON_E);
     kpd_print_string(entry->description, highlight);
     output_print(false, COMMON_N);
 }
@@ -386,24 +404,24 @@ void kpd_print_entries(const struct EntryBuffer *entries, const cchar_t *highlig
     }
 }
 
-bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
+bool kpd_parse_number(char *mask, size_t mask_size, const cchar_t *number_string)
 {
-    const char *current_string;
+    const cchar_t *current_string;
 
     if (mask != NULL) memset(mask, 0, mask_size);
     current_string = number_string;
     while (*current_string != '\0')
     {
         /* Try to read number */
-        char *next_string;
-        size_t begin = strtoul(current_string, &next_string, 10);
+        cchar_t *next_string;
+        size_t begin = COMMON_WCS(toul(current_string, &next_string, 10));
         if (next_string != current_string)
         {
             /* Number read */
             const bool hyphen = (*next_string == '-');
             current_string = hyphen ? (next_string + 1) : (next_string);
             if (mask != NULL && (begin == 0 || begin > mask_size))
-                error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)begin);
+                error_print_die(ERR_USAGE, COMMON_L("'%u' is out of range"), (unsigned int)begin);
             if (hyphen)
             {
                 /* Hyphen after number */
@@ -431,7 +449,7 @@ bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
     return true;
 }
 
-char *kpd_create_mask(size_t mask_size, const char *number_string)
+char *kpd_create_mask(size_t mask_size, const cchar_t *number_string)
 {
     char *mask = malloc(mask_size);
     ARET(ERR_MALLOC, mask != NULL);
@@ -475,9 +493,9 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
     return mask;
 }
 
-bool kpd_resolve_action(enum Action *action, const char *action_string)
+bool kpd_resolve_action(enum Action *action, const cchar_t *action_string)
 {
-    const char *action_strings[] = { "commit", "remove", "done", "undo", "priority", "edit" };
+    const cchar_t *action_strings[] = { COMMON_L("commit"), COMMON_L("remove"), COMMON_L("done"), COMMON_L("undo"), COMMON_L("priority"), COMMON_L("edit") };
     size_t action_index;
     bool result;
     
@@ -486,9 +504,9 @@ bool kpd_resolve_action(enum Action *action, const char *action_string)
     return result;
 }
 
-bool kpd_resolve_status(enum Status *status, const char *status_string)
+bool kpd_resolve_status(enum Status *status, const cchar_t *status_string)
 {
-    const char *status_strings[] = { "all", "open", "done" };
+    const cchar_t *status_strings[] = { COMMON_L("all"), COMMON_L("open"), COMMON_L("done") };
     size_t status_index;
     bool result;
     
@@ -497,9 +515,9 @@ bool kpd_resolve_status(enum Status *status, const char *status_string)
     return result;
 }
 
-bool kpd_resolve_priority(enum Priority *priority, const char *priority_string)
+bool kpd_resolve_priority(enum Priority *priority, const cchar_t *priority_string)
 {
-    const char *priority_strings[] = { "low", "medium", "high", "critical" };
+    const cchar_t *priority_strings[] = { COMMON_L("low"), COMMON_L("medium"), COMMON_L("high"), COMMON_L("critical") };
     size_t priority_index;
     bool result;
 
@@ -508,43 +526,43 @@ bool kpd_resolve_priority(enum Priority *priority, const char *priority_string)
     return result;
 }
 
-bool kpd_resolve_commit(const char *commit_string)
+bool kpd_resolve_commit(const cchar_t *commit_string)
 {
-    const size_t commit_length = strlen(commit_string);
+    const size_t commit_length = COMMON_WCS(len(commit_string));
     const size_t only_option_length = strlen("commit");
-    return commit_length <= only_option_length && memcmp(commit_string, "commit", commit_length) == 0;
+    return commit_length <= only_option_length && COMMON_W(memcmp(commit_string, COMMON_L("commit"), commit_length)) == 0;
 }
 
-bool kpd_resolve_relative(const char *relative_string)
+bool kpd_resolve_relative(const cchar_t *relative_string)
 {
-    const size_t relative_length = strlen(relative_string);
+    const size_t relative_length = COMMON_WCS(len(relative_string));
     const size_t only_option_length = strlen("relative");
-    return relative_length <= only_option_length && memcmp(relative_string, "relative", relative_length) == 0;
+    return relative_length <= only_option_length && COMMON_W(memcmp(relative_string, COMMON_L("relative"), relative_length)) == 0;
 }
 
-void kpd_invoke_git(const char *path, const char *commit_message)
+void kpd_invoke_git(const cchar_t *path, const cchar_t *commit_message)
 {
     size_t path_length_1, commit_message_length_1;
-    char *path_copy, *commit_message_copy;
-    char *arguments[5];
+    cchar_t *path_copy, *commit_message_copy;
+    cchar_t *arguments[5];
 
-    path_length_1 = strlen(path) + 1;
-    commit_message_length_1 = strlen(commit_message) + 1;
-    path_copy = malloc(path_length_1);
-    commit_message_copy = malloc(commit_message_length_1);
-    if (path_copy == NULL || commit_message_copy == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
-    memcpy(path_copy, path, path_length_1);
-    memcpy(commit_message_copy, commit_message, commit_message_length_1);
+    path_length_1 = COMMON_WCS(len(path)) + 1;
+    commit_message_length_1 = COMMON_WCS(len(commit_message)) + 1;
+    path_copy = malloc(path_length_1 * sizeof(*path_copy));
+    commit_message_copy = malloc(commit_message_length_1 * sizeof(*commit_message_copy));
+    if (path_copy == NULL || commit_message_copy == NULL) error_print_die(ERR_MALLOC, COMMON_L("malloc() failed"));
+    COMMON_W(memcpy(path_copy, path, path_length_1));
+    COMMON_W(memcpy(commit_message_copy, commit_message, commit_message_length_1));
     
-    arguments[0] = "git";
-    arguments[1] = "add";
+    arguments[0] = COMMON_L("git");
+    arguments[1] = COMMON_L("add");
     arguments[2] = path_copy;
     arguments[3] = NULL;
     kpd_invoke(arguments);
 
-    arguments[0] = "git";
-    arguments[1] = "commit";
-    arguments[2] = "-m";
+    arguments[0] = COMMON_L("git");
+    arguments[1] = COMMON_L("commit");
+    arguments[2] = COMMON_L("-m");
     arguments[3] = commit_message_copy;
     arguments[4] = NULL;
     kpd_invoke(arguments);

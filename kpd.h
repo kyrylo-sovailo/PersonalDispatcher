@@ -11,7 +11,7 @@
 #define TARGET "TODO.md"
 #define INITIAL_BUFFER_SIZE 127
 
-typedef int (Command)(int argc, char **argv);
+typedef int (Command)(int argc, cchar_t **argv);
 
 /* Exit code */
 enum Error
@@ -122,7 +122,7 @@ void kpd_invoke_git(const cchar_t *path, const cchar_t *commit_message);
 
 /* entries.c */
 /* Find substring in a string, case-insensitive */
-const char *string_find_case(const cchar_t *haystack, const cchar_t *needle);
+const cchar_t *string_find_case(const cchar_t *haystack, const cchar_t *needle);
 /* Finds open entry with highest priority */
 bool entries_highest_open(size_t *index, const struct EntryBuffer *entries);
 /* Sorts entries by priority, critical first */
@@ -134,6 +134,9 @@ DECLARE_BUFFER_FINALIZE(struct Entry, EntryBuffer, entries_)
 /* string.c */
 /* Sets string to line read from file, returns whether read something */
 bool string_get_line(struct CharBuffer *string, void *file);
+#ifdef COMMON_WCHAR
+bool nstring_get_line(struct NCharBuffer *string, void *file);
+#endif
 /* Sets string to user input */
 void string_get_input(struct CharBuffer *string, const cchar_t *prompt, const cchar_t *prefill, const cchar_t *prefill_prompt);
 /* Transforms description to commit message */

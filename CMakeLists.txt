@@ -65,6 +65,7 @@ endif()
 # Source files
 set(SOURCES
 commonlib/error.c
+commonlib/char_buffer.c
 commonlib/generic_buffer_implementation.c
 commonlib/output.c
 commonlib/path.c

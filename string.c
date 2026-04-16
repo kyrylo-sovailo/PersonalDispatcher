@@ -1,18 +1,19 @@
 #include "kpd.h"
 #include "commonlib/error.h"
+#include "commonlib/output.h"
 #include "commonlib/string.h"
-
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <unistd.h>
 
 #ifdef ENABLE_READLINE
     #include <readline/readline.h>
     #include <readline/history.h>
 #endif
 
-#define ascii_isalnum()
+#include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+#ifdef COMMON_WCHAR
+    #include <wchar.h>
+#endif
 
 /* Required by string_get_input */
 #ifdef ENABLE_READLINE
@@ -25,9 +26,9 @@ static int string_set_input_hook(void)
 }
 #endif
 
-const char *string_find_case(const char *haystack, const char *needle)
+const cchar_t *string_find_case(const cchar_t *haystack, const cchar_t *needle)
 {
-    const size_t needle_length = strlen(needle);
+    const size_t needle_length = COMMON_WCS(len(needle));
     for (; *haystack != '\0'; haystack++)
     {
         bool difference;
@@ -35,8 +36,8 @@ const char *string_find_case(const char *haystack, const char *needle)
         difference = false;
         for (i = 0; i < needle_length; i++)
         {
-            char needle_c = needle[i];
-            char haystack_c = haystack[i];
+            cchar_t needle_c = needle[i];
+            cchar_t haystack_c = haystack[i];
             if (needle_c >= 'A' && needle_c <= 'Z') needle_c += ('a' - 'A'); /* Needed for highlighting */
             if (haystack_c >= 'A' && haystack_c <= 'Z') haystack_c += ('a' - 'A');
             if (needle_c != haystack_c) { difference = true; break; }
@@ -53,7 +54,7 @@ bool string_get_line(struct CharBuffer *string, void *file)
     while (true)
     {
         /* There are three possible actions to do, */
-        const char *result = fgets(string->p + string->size, (int)(string->capacity - string->size), file); /* Puts '\0' */
+        const cchar_t *result = COMMON_TERNARY(fget, fgetw, s(string->p + string->size, (int)(string->capacity - string->size), file)); /* Puts '\0' */
         if (result == NULL)
         {
             if (string->size == 0) return false; /* Nothing to parse, stop */
@@ -61,7 +62,7 @@ bool string_get_line(struct CharBuffer *string, void *file)
         }
         else
         {
-            const char *endline = memchr(string->p, '\n', string->capacity - 1);
+            const cchar_t *endline = COMMON_W(memchr(string->p, '\n', string->capacity - 1));
             if (endline == NULL)
             {
                 /* Endline not read, try again */
@@ -80,7 +81,43 @@ bool string_get_line(struct CharBuffer *string, void *file)
     }    
 }
 
-void string_get_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt)
+#ifdef COMMON_WCHAR
+bool nstring_get_line(struct NCharBuffer *string, void *file)
+{
+    if (string->capacity < INITIAL_BUFFER_SIZE + 1) nstring_resize(string, INITIAL_BUFFER_SIZE);
+    string->size = 0;
+    while (true)
+    {
+        /* There are three possible actions to do, */
+        const nchar_t *result = fgets(string->p + string->size, (int)(string->capacity - string->size), file); /* Puts '\0' */
+        if (result == NULL)
+        {
+            if (string->size == 0) return false; /* Nothing to parse, stop */
+            else return true; /* Something left to parse */
+        }
+        else
+        {
+            const nchar_t *endline = memchr(string->p, '\n', string->capacity - 1);
+            if (endline == NULL)
+            {
+                /* Endline not read, try again */
+                const size_t size = string->capacity - 1; /* Meaningful read symbols */
+                string->size = size;
+                nstring_resize(string, 2 * size);
+                string->size = size;
+            }
+            else
+            {
+                /* Endline read, can parse */
+                string->size = (size_t)(endline - string->p) + 1; /* String is one longer than endline */
+                return true;
+            }
+        }
+    }    
+}
+#endif
+
+void string_get_input(struct CharBuffer *string, const cchar_t *prompt, const cchar_t *prefill, const cchar_t *prefill_prompt)
 {
     #ifdef ENABLE_READLINE
         char *line;
@@ -100,8 +137,7 @@ void string_get_input(struct CharBuffer *string, const char *prompt, const char 
             memset(line, 0, sizeof(*string));
         }
     #else
-        printf("%s%s\n", prefill_prompt, prefill);
-        printf("%s", prompt);
+        output_print(COMMON_S COMMON_S COMMON_N COMMON_S, prefill_prompt, prefill, prompt);
         string_get_line(string, stdin);
     #endif
     string_trim(string);
@@ -109,63 +145,63 @@ void string_get_input(struct CharBuffer *string, const char *prompt, const char 
 
 void string_description_to_done_commit(struct CharBuffer *string)
 {
-    const char *verbs[] =
+    const cchar_t *verbs[] =
     {
-        "add",
-        "build",
-        "change", "check", "clean", "close", "complete",
-        "debug", "delete", "disable", "do", "document",
-        "enable",
-        "find", "fix",
-        "handle",
-        "implement", "improve",
-        "make", "merge", "migrate",
-        "optimize",
-        "refactor", "remove", "replace", "resolve", "revert", "rewrite",
-        "solve",
-        "test",
-        "update", "upgrade",
-        "validate",
-        "write"
+        COMMON_L("add"),
+        COMMON_L("build"),
+        COMMON_L("change"), COMMON_L("check"), COMMON_L("clean"), COMMON_L("close"), COMMON_L("complete"),
+        COMMON_L("debug"), COMMON_L("delete"), COMMON_L("disable"), COMMON_L("do"), COMMON_L("document"),
+        COMMON_L("enable"),
+        COMMON_L("find"), COMMON_L("fix"),
+        COMMON_L("handle"),
+        COMMON_L("implement"), COMMON_L("improve"),
+        COMMON_L("make"), COMMON_L("merge"), COMMON_L("migrate"),
+        COMMON_L("optimize"),
+        COMMON_L("refactor"), COMMON_L("remove"), COMMON_L("replace"), COMMON_L("resolve"), COMMON_L("revert"), COMMON_L("rewrite"),
+        COMMON_L("solve"),
+        COMMON_L("test"),
+        COMMON_L("update"), COMMON_L("upgrade"),
+        COMMON_L("validate"),
+        COMMON_L("write")
     };
 
-    const char *verbs_perfect[] =
+    const cchar_t *verbs_perfect[] =
     {
-        "added",
-        "built",
-        "changed", "checked", "cleaned", "closed", "completed",
-        "debugged", "deleted", "disabled", "done", "documented",
-        "enabled",
-        "found", "fixed",
-        "handled",
-        "implemented", "improved",
-        "made", "merged", "migrated",
-        "optimized",
-        "refactored", "removed", "replaced", "resolved", "reverted", "rewrote",
-        "solved",
-        "tested",
-        "updated", "upgraded",
-        "validated",
-        "wrote"
+        COMMON_L("added"),
+        COMMON_L("built"),
+        COMMON_L("changed"), COMMON_L("checked"), COMMON_L("cleaned"), COMMON_L("closed"), COMMON_L("completed"),
+        COMMON_L("debugged"), COMMON_L("deleted"), COMMON_L("disabled"), COMMON_L("done"), COMMON_L("documented"),
+        COMMON_L("enabled"),
+        COMMON_L("found"), COMMON_L("fixed"),
+        COMMON_L("handled"),
+        COMMON_L("implemented"), COMMON_L("improved"),
+        COMMON_L("made"), COMMON_L("merged"), COMMON_L("migrated"),
+        COMMON_L("optimized"),
+        COMMON_L("refactored"), COMMON_L("removed"), COMMON_L("replaced"), COMMON_L("resolved"), COMMON_L("reverted"), COMMON_L("rewrote"),
+        COMMON_L("solved"),
+        COMMON_L("tested"),
+        COMMON_L("updated"), COMMON_L("upgraded"),
+        COMMON_L("validated"),
+        COMMON_L("wrote")
     };
 
-    const char *prefix = "Closed '";
-    const char *suffix = "'";
+    const cchar_t *prefix = COMMON_L("Closed '");
+    const cchar_t *suffix = COMMON_L("'");
     bool changed;
     size_t i;
 
     changed = false;
     for (i = 0; i < sizeof(verbs) / sizeof(*verbs); i++)
     {
-        const char *verb, *verb_perfect, *found;
+        const cchar_t *verb, *verb_perfect, *found;
         size_t verb_length, verb_perfect_length;
-        char pre, last, post;
+        cchar_t pre, last, post;
         size_t found_begin, verb_match;
         bool upper;
 
         /* Find verb */
         verb = verbs[i];
-        verb_length = strlen(verb);
+        verb_length = COMMON_WCS(len(verb));
         found = string_find_case(string->p, verb);
         if (found == NULL) continue; /* verb not found */
         pre = (found > string->p) ? found[-1] : '\0';
@@ -178,51 +214,51 @@ void string_description_to_done_commit(struct CharBuffer *string)
         found_begin = (size_t)(found - string->p);
         upper = last >= 'A' && last <= 'Z';
         verb_perfect = verbs_perfect[i];
-        verb_perfect_length = strlen(verb_perfect);
+        verb_perfect_length = COMMON_WCS(len(verb_perfect));
         verb_match = 0;
         while (verb[verb_match] == verb_perfect[verb_match]) verb_match++;
         string_replace_mem(string, found_begin + verb_match, verb_length - verb_match, verb_perfect + verb_match, verb_perfect_length - verb_match);
         if (upper)
         {
-            char *found_w = string->p + found_begin;
-            char *p;
+            cchar_t *found_w = string->p + found_begin;
+            cchar_t *p;
             for (p = found_w + verb_match; p < found_w + verb_length; p++) *p -= ('a' - 'A');
         }
         changed = true;
     }
 
     if (changed) return;
-    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
-    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
+    string_replace_mem(string, 0, 0, prefix, COMMON_WCS(len(prefix)));
+    string_replace_mem(string, string->size, 0, suffix, COMMON_WCS(len(suffix)));
 }
 
 void string_description_to_undo_commit(struct CharBuffer *string)
 {
-    const char *prefix = "Reopened '";
-    const char *suffix = "'";
-    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
-    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
+    const cchar_t *prefix = COMMON_L("Reopened '");
+    const cchar_t *suffix = COMMON_L("'");
+    string_replace_mem(string, 0, 0, prefix, COMMON_WCS(len(prefix)));
+    string_replace_mem(string, string->size, 0, suffix, COMMON_WCS(len(suffix)));
 }
 
 void string_description_to_remove_commit(struct CharBuffer *string)
 {
-    const char *prefix = "Removed '";
-    const char *suffix = "'";
-    string_replace_mem(string, 0, 0, prefix, strlen(prefix));
-    string_replace_mem(string, string->size, 0, suffix, strlen(suffix));
+    const cchar_t *prefix = COMMON_L("Removed '");
+    const cchar_t *suffix = COMMON_L("'");
+    string_replace_mem(string, 0, 0, prefix, COMMON_WCS(len(prefix)));
+    string_replace_mem(string, string->size, 0, suffix, COMMON_WCS(len(suffix)));
 }
 
-bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size)
+bool string_resolve(size_t *index, const cchar_t *option, const cchar_t *const *options, size_t options_size)
 {
     /* All options can be (so far) resolved by the first letter, so don't care about ambiguity */
     size_t option_length;
     size_t i;
     
-    option_length = strlen(option);
+    option_length = COMMON_WCS(len(option));
     for (i = 0; i < options_size; i++)
     {
-        const size_t option_i_length = strlen(options[i]);
-        if (option_length <= option_i_length && memcmp(option, options[i], option_length) == 0)
+        const size_t option_i_length = COMMON_WCS(len(options[i]));
+        if (option_length <= option_i_length && COMMON_W(memcmp(option, options[i], option_length)) == 0)
         {
             *index = i;
             return true;

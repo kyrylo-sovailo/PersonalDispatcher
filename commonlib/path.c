@@ -250,7 +250,7 @@ ERROR_TYPE path_get_executable_path(struct CharBuffer *path, int argc, cchar_t *
         while (true)
         {
             DWORD size = GetModuleFileName(NULL, path->p, (DWORD)path->size);
-            ARET(size > 0);
+            ARET(ERR_PATH, size > 0);
             if (size == path->size)
             {
                 PRET(char_buffer_resize(path, 2 * path->size));
