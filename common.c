@@ -1,10 +1,15 @@
 #include "commonlib/error.h"
 #include "commonlib/string.h"
+#include "commonlib/output.h"
 #include "commonlib/path.h"
 #include "kpd.h"
 
-#include <sys/wait.h>
-#include <unistd.h>
+#ifdef WIN32
+    #include <Windows.h>
+#else
+    #include <sys/wait.h>
+    #include <unistd.h>
+#endif
 
 #include <math.h>
 #include <stdarg.h>
@@ -14,33 +19,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Needed by kpd_print_entry */
-#define BLACK           "\x1b[00;30m"
-#define RED             "\x1b[00;31m"
-#define GREEN           "\x1b[00;32m"
-#define YELLOW          "\x1b[00;33m"
-#define BLUE            "\x1b[00;34m"
-#define MAGENTA         "\x1b[00;35m"
-#define CYAN            "\x1b[00;36m"
-#define WHITE           "\x1b[00;37m"
-#define BRIGHT_BLACK    "\x1b[01;30m"
-#define BRIGHT_RED      "\x1b[01;31m"
-#define BRIGHT_GREEN    "\x1b[01;32m"
-#define BRIGHT_YELLOW   "\x1b[01;33m"
-#define BRIGHT_BLUE     "\x1b[01;34m"
-#define BRIGHT_MAGENTA  "\x1b[01;35m"
-#define BRIGHT_CYAN     "\x1b[01;36m"
-#define BRIGHT_WHITE    "\x1b[01;37m"
-#define DEFAULT         "\x1b[0m"
-
 /* Needed by kpd_read_target */
 static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
 {
-    const cchar_t *markers[4] = { "(priority: low)", "(priority: medium)", "(priority: high)", "(priority: critical)" };
+    const cchar_t *markers[4] = { COMMON_L("(priority: low)"), COMMON_L("(priority: medium)"), COMMON_L("(priority: high)"), COMMON_L("(priority: critical)") };
     enum Priority priority_i;
 
     /* Empty lines */
-    if (strspn(line->p, " \t\n\r") == line->size) return false;
+    if (COMMON_WCS(spn(line->p, COMMON_L(" \t\n\r"))) == line->size) return false;
 
     /* Parse beginning */
     if (line->size < 7
@@ -50,7 +36,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     || line->p[3] != '['
     || (line->p[4] != ' ' && line->p[4] != 'X')
     || line->p[5] != ']'
-    || line->p[6] != ' ') error_print_die(ERR_FORMAT, "invalid line '%s'", line->p);
+    || line->p[6] != ' ') RET1(ERR_FORMAT, "invalid line '" COMMON_S COMMON_L("'"), line->p);
     entry->done = line->p[4] == 'X';
     
     /* Parse priority */
@@ -58,23 +44,23 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     entry->priority_explicit = false;
     for (priority_i = 0; priority_i < 4; priority_i++)
     {
-        cchar_t *marker_found = strstr(line->p, markers[priority_i]);
+        cchar_t *marker_found = COMMON_WCS(str(line->p, markers[priority_i]));
         if (marker_found != NULL)
         {
             /* Remove marker */
             entry->priority = priority_i;
             entry->priority_explicit = true;
-            string_replace_mem(line, (size_t)(marker_found - line->p), strlen(markers[priority_i]), NULL, 0);
+            string_replace_mem(line, (size_t)(marker_found - line->p), COMMON_WCS(len(markers[priority_i])), NULL, 0);
             break;
         }
     }
 
     /* Allocate */
-    memset(line->p, ' ', 7);
+    COMMON_W(memset(line->p, ' ', 7));
     string_trim(line); /* Not really efficient because requires one more memcpy*/
-    entry->description = malloc(line->size + 1);
-    if (entry->description == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
-    memcpy(entry->description, line->p, line->size + 1);
+    entry->description = malloc((line->size + 1) * sizeof(*entry->description));
+    if (entry->description == NULL) RET0(ERR_MALLOC, "malloc() failed");
+    COMMON_W(memcpy(entry->description, line->p, line->size + 1));
     return true;
 }
 
@@ -149,69 +135,85 @@ static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t
             /* Number read */
             *current_string = next_string;
             if (begin_read && begin > end) return false;
-            if (mask != NULL && (end == 0 || end > mask_size))
-                error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
+            if (mask != NULL && (end == 0 || end > mask_size)) RET1(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
         }
-        if (mask != NULL) memset(mask+(begin-1), '\1', end-(begin-1));
+        if (mask != NULL) COMMON_W(memset(mask+(begin-1), '\1', end-(begin-1)));
         return kpd_parse_number_post_number(current_string);
     }
 }
 
 /* Needed by kpd_invoke_git */
-static void kpd_invoke(char *const *arguments)
+static void kpd_invoke(cchar_t *const *arguments)
 {
-    char *const *argument_i;
+    cchar_t *const *argument_i;
     int id;
 
+    output_open(false);
     for (argument_i = &arguments[0]; *argument_i != NULL; argument_i++)
     {
         const bool next = *(argument_i + 1) != NULL;
-        const char *quotation = (strchr(*argument_i, ' ') == NULL) ? "" : (
-            (strchr(*argument_i, '\"') == NULL) ? "\"" : "\'"
-        );
-        printf("%s%s%s%c", quotation, *argument_i, quotation, next ? ' ' : '\n');
+        const cchar_t *quotation;
+        if (COMMON_WCS(chr(*argument_i, ' ')) == NULL) quotation = COMMON_E;
+        else if (COMMON_WCS(chr(*argument_i, '\'')) == NULL) quotation = COMMON_L("\'");
+        else quotation = COMMON_L("\"");
+        output_print(false, COMMON_S COMMON_S COMMON_S COMMON_C, quotation, *argument_i, quotation, next ? COMMON_L(' ') : COMMON_L('\n'));
     }
+    output_close(false);
 
-    id = fork();
-    if (id < 0)
-    {
-        error_print_die(ERR_FORK, "vfork() failed");
-    }
-    else if (id == 0)
-    {
-        if (execvp(arguments[0], arguments) < 0) error_print_die(ERR_EXEC, "execvp() failed");
-    }
-    else
-    {
-        int status;
-        if (waitpid(id, &status, 0) < 0) error_print_die(ERR_WAIT, "waitpid() failed");
-        if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) error_print_die(ERR_GIT, "'%s' failed", arguments[0]);
-    }
+    #ifdef WIN32
+        /* TODO */
+    #else
+        id = fork();
+        if (id < 0) error_print_die(ERR_FORK, COMMON_L("vfork() failed"));
+        if (id == 0)
+        {
+            if (execvp(arguments[0], arguments) < 0) error_print_die(ERR_EXEC, COMMON_L("execvp() failed"));
+        }
+        else
+        {
+            int status;
+            if (waitpid(id, &status, 0) < 0) error_print_die(ERR_WAIT, COMMON_L("waitpid() failed"));
+            if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) error_print_die(ERR_GIT, COMMON_QS COMMON_L(" failed"), arguments[0]);
+        }
+    #endif
 }
 
 /* Needed by kpd_print_entry */
-static void kpd_print_string(const char *string, const char *highlight)
+static void kpd_print_string(const cchar_t *string, const cchar_t *highlight)
 {
-    const char *first_found = NULL, *previous_found = NULL;
+    const cchar_t *first_found = NULL, *previous_found = NULL;
     size_t highlight_length;
     if (highlight == NULL) { printf("%s", string); return; }
 
-    highlight_length = strlen(highlight);
+    highlight_length = COMMON_WCS(len(highlight));
     while (true)
     {
-        const char *found = string_find_case(string, highlight);
+        const cchar_t *found = string_find_case(string, highlight);
         if (found == NULL)
         {
             /* No more entries */
-            if (previous_found == NULL) printf("%s", string);
-            else printf(RED "%.*s" DEFAULT "%s", (int)(previous_found + highlight_length - first_found), first_found, previous_found + highlight_length);
+            if (previous_found == NULL)
+            {
+                output_print(false, COMMON_S, string);
+            }
+            else
+            {
+                output_print_color(false, COMMON_RED, COMMON_NS, (int)(previous_found + highlight_length - first_found), first_found);
+                output_print(false, COMMON_S, previous_found + highlight_length);
+            };
             break;
         }
         else if (previous_found == NULL || found > previous_found + highlight_length)
         {
             /* Entry does not intersect with the previous entry */
-            if (previous_found == NULL) printf("%.*s", (int)(found - string), string);
-            else printf(RED "%.*s" DEFAULT, (int)(previous_found + highlight_length - first_found), first_found);
+            if (previous_found == NULL)
+            {
+                output_print(false, COMMON_NS, (int)(found - string), string);
+            }
+            else
+            {
+                output_print_color(false, COMMON_RED, COMMON_NS, (int)(previous_found + highlight_length - first_found), first_found);
+            }
             first_found = found;
         }
         else
@@ -232,15 +234,16 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
 
     /* Search for TODO.md */
     path_get_working_directory(&local_path);
-    path_append_mem(&local_path, TARGET, strlen(TARGET));
+    path_append_mem(&local_path, COMMON_L(TARGET), strlen(TARGET));
     steps = 0;
     while (true)
     {
-        file = fopen(local_path.p, "r+");
+        
+        file = COMMON__W(fopen(local_path.p, COMMON_L("r+")));
         if (file != NULL) break;
         if (!path_get_directory(&local_path, &local_path, true) || !path_get_directory(&local_path, &local_path, true))
-            error_print_die(ERR_USAGE, "current_string directory does not contain " TARGET);
-        path_append_mem(&local_path, TARGET, strlen(TARGET));
+            error_print_die(ERR_USAGE, COMMON_L("current_string directory does not contain ") COMMON_L(TARGET));
+        path_append_mem(&local_path, COMMON_L(TARGET), strlen(TARGET));
         steps++;
     }
 
@@ -291,48 +294,66 @@ void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer
     FILE *file;
     struct Entry *entry_i;
 
-    file = fopen(path->p, "w");
-    if (file == NULL) error_print_die(ERR_FILE_OPEN, "fopen() failed");
+    file = COMMON__W(fopen(path->p, COMMON_L("w")));
+    if (file == NULL) error_print_die(ERR_FILE_OPEN, COMMON_L("fopen() failed"));
 
     for (entry_i = entries->p; entry_i < entries->p + entries->size; entry_i++)
     {
-        const char *markers[4] = { " (priority: low)", " (priority: medium)", " (priority: high)", " (priority: critical)" };
-        const char *marker = entry_i->priority_explicit ? markers[entry_i->priority] : "";
-        fprintf(file, " - [%c] %s%s\n", entry_i->done ? 'X' : ' ', entry_i->description, marker);
+        const nchar_t *markers[4] = { " (priority: low)", " (priority: medium)", " (priority: high)", " (priority: critical)" };
+        const nchar_t *marker = entry_i->priority_explicit ? markers[entry_i->priority] : "";
+        #ifdef WIN32
+            const size_t wide_description_size = wcslen(entry_i->description) + 1;
+            size_t description_size;
+            char *description;
+            wstring_to_nstring(entry_i->description, wide_description_size, NULL, &description_size);
+            description = malloc(description_size);
+            ARET(ERR_MALLOC, description != NULL);
+            wstring_to_nstring(entry_i->description, wide_description_size, description, &description_size);
+        #else
+            const nchar_t *description = entry_i->description;
+        #endif
+
+        fprintf(file, " - [%c] %s%s\n", entry_i->done ? 'X' : ' ', description, marker);
+        
+        #ifdef WIN32
+            free(description);
+        #endif
     }
 
     fclose(file);
 }
 
-void kpd_print_entry(const struct Entry *entry, const char *highlight, unsigned int max_length, unsigned int max_marker_length)
+void kpd_print_entry(const struct Entry *entry, const cchar_t *highlight, unsigned int max_length, unsigned int max_marker_length)
 {
-    const char *markers[4] =
-    {
-                "(low)",
-        CYAN    "(medium)"      DEFAULT,
-        YELLOW  "(high)"        DEFAULT,
-        RED     "(critical)"    DEFAULT
-    };
+    const cchar_t *markers[4] = { COMMON_L("(low)"), COMMON_L("(medium)"), COMMON_L("(high)"), COMMON_L("(critical)") };
+    const bool marker_use_colors[4] = { false, true, true, true };
+    const ccolor_t marker_colors[4] = { COMMON_WHITE, COMMON_CYAN, COMMON_YELLOW, COMMON_RED };
 
     const size_t number = entry->number + 1;
     const unsigned int number_length = get_number_length(number);
     const unsigned int number_spaces = (max_length == 0) ? 0 : (max_length - number_length);
 
-    const char *marker = entry->done ? GREEN "(done)" DEFAULT : markers[entry->priority];
+    const cchar_t* marker = entry->done ? COMMON_L("(done)") : markers[entry->priority];
+    bool marker_use_color = entry->done ? true : marker_use_colors[entry->priority];
+    const ccolor_t marker_color = entry->done ? COMMON_GREEN : marker_colors[entry->priority];
+
     const unsigned int marker_length = get_marker_length(entry->done, entry->priority);
     const unsigned int marker_spaces = (max_marker_length == 0) ? 0 : (max_marker_length - marker_length);
     const unsigned int left_marker_spaces = (marker_spaces) / 2;
     const unsigned int right_marker_spaces = (marker_spaces + 1) / 2;
 
-    printf("%u.%*s %*s%s%*s ",
+    output_print(false, COMMON_L("%u.") COMMON_NS COMMON_L(" ") COMMON_NS,
         (unsigned int)number,
-        number_spaces, "",
-        left_marker_spaces, "", marker, right_marker_spaces, "");
+        number_spaces, COMMON_E,
+        left_marker_spaces, COMMON_E);
+    if (marker_use_color) output_print_color(false, marker_color, COMMON_S, marker);
+    else output_print(false, COMMON_S, marker);
+    output_print(false, COMMON_NS, right_marker_spaces, COMMON_E);
     kpd_print_string(entry->description, highlight);
-    printf("\n");
+    output_print(false, COMMON_N);
 }
 
-void kpd_print_entries(const struct EntryBuffer *entries, const char *highlight, const char *mask)
+void kpd_print_entries(const struct EntryBuffer *entries, const cchar_t *highlight, const char *mask)
 {
     bool mask_valid;
     size_t max_number;
@@ -413,7 +434,7 @@ bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string)
 char *kpd_create_mask(size_t mask_size, const char *number_string)
 {
     char *mask = malloc(mask_size);
-    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
+    ARET(ERR_MALLOC, mask != NULL);
     kpd_parse_number(mask, mask_size, number_string);
     return mask;
 }
@@ -423,9 +444,9 @@ char *kpd_create_mask_highest_open(const struct EntryBuffer *entries)
     char *mask;
     size_t highest;
     
+    if (!entries_highest_open(&highest, entries)) error_print_die(ERR_USAGE, COMMON_L("no entries"));
     mask = malloc(entries->size);
-    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
-    if (!entries_highest_open(&highest, entries)) error_print_die(ERR_USAGE, "no entries");
+    ARET(ERR_MALLOC, mask != NULL);
     memset(mask, '\0', entries->size);
     mask[highest] = '\1';
     return mask;
@@ -437,7 +458,7 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
     const struct Entry *entry_i, *last;
     
     mask = malloc(entries->size);
-    if (mask == NULL) error_print_die(ERR_MALLOC, "malloc() failed");
+    ARET(ERR_MALLOC, mask != NULL);
 
     last = NULL;
     for (entry_i = entries->p + entries->size; entry_i-- > entries->p;)
@@ -448,7 +469,7 @@ char *kpd_create_mask_last_closed(const struct EntryBuffer *entries)
             break;
         }
     }
-    if (last == NULL) error_print_die(ERR_USAGE, "no entries");
+    if (last == NULL) error_print_die(ERR_USAGE, COMMON_L("no entries"));
     memset(mask, '\0', entries->size);
     mask[last - entries->p] = '\1';
     return mask;

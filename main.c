@@ -1,10 +1,15 @@
+#include "kpd.h"
 #include "commonlib/char_buffer.h"
 #include "commonlib/output.h"
-#include "kpd.h"
 #include "commonlib/string.h"
 #include "commonlib/path.h"
 
-#include <dirent.h>
+#ifdef WIN32
+    #include <Windows.h>
+#else
+    #include <dirent.h>
+#endif
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -465,7 +470,7 @@ static int kpd_find(int argc, char **argv)
     {
         if (kpd_resolve_status(&status, argv[1]))
         {
-            if (!kpd_resolve_action(&action, argv[2])) error_print_die(ERR_USAGE, "'%s' is not a valid action", argv[2]);
+            if (!kpd_resolve_action(&action, argv[2])) error_print_die(ERR_USAGE, COMMON_L("'%s' is not a valid action"), argv[2]);
             if (action == ACT_COMMIT || action == ACT_EDIT)
             {
                 new_description_or_commit_message.p = argv[3];

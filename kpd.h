@@ -83,7 +83,7 @@ enum Priority
 struct Entry
 {
     size_t number;          /* Entry number, zero-based */
-    char *description;      /* Plain text description */
+    cchar_t *description;   /* Plain text description */
     enum Priority priority; /* Priority */
     bool priority_explicit; /* Indicator if priority was given explicitly */
     bool done;              /* Task is done */
@@ -96,33 +96,33 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
 /* Writes entries to the open FILE* */
 void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer *path);
 /* Prints entry to stdout (max_length/max_marker_length are zero for no spaces) */
-void kpd_print_entry(const struct Entry *entry, const char *highlight, unsigned int max_length, unsigned int max_marker_length);
+void kpd_print_entry(const struct Entry *entry, const cchar_t *highlight, unsigned int max_length, unsigned int max_marker_length);
 /* Prints entries to stdout (if mask is NULL, prints all) */
-void kpd_print_entries(const struct EntryBuffer *entries, const char *highlight, const char *mask);
+void kpd_print_entries(const struct EntryBuffer *entries, const cchar_t *highlight, const char *mask);
 /* Parses number and sets mask (if mask is NULL, only checks format) */
-bool kpd_parse_number(char *mask, size_t mask_size, const char *number_string);
+bool kpd_parse_number(char *mask, size_t mask_size, const cchar_t *number_string);
 /* Sets mask based on parsed number */
-char *kpd_create_mask(size_t mask_size, const char *number_string);
+char *kpd_create_mask(size_t mask_size, const cchar_t *number_string);
 /* Sets mask based on open entry with highest priority */
 char *kpd_create_mask_highest_open(const struct EntryBuffer *entries);
 /* Sets mask based on last done entry */
 char *kpd_create_mask_last_closed(const struct EntryBuffer *entries);
 /* Parses action string (if action is NULL, only checks) */
-bool kpd_resolve_action(enum Action *action, const char *action_string);
+bool kpd_resolve_action(enum Action *action, const cchar_t *action_string);
 /* Parses status string (if status is NULL, only checks) */
-bool kpd_resolve_status(enum Status *status, const char *status_string);
+bool kpd_resolve_status(enum Status *status, const cchar_t *status_string);
 /* Parses priority string (if priority is NULL, only checks) */
-bool kpd_resolve_priority(enum Priority *priority, const char *priority_string);
+bool kpd_resolve_priority(enum Priority *priority, const cchar_t *priority_string);
 /* Returns if string can be resolved as 'commit' */
-bool kpd_resolve_commit(const char *commit_string);
+bool kpd_resolve_commit(const cchar_t *commit_string);
 /* Returns if string can be resolved as 'relative' */
-bool kpd_resolve_relative(const char *relative_string);
+bool kpd_resolve_relative(const cchar_t *relative_string);
 /* Invokes git */
-void kpd_invoke_git(const char *path, const char *commit_message);
+void kpd_invoke_git(const cchar_t *path, const cchar_t *commit_message);
 
 /* entries.c */
 /* Find substring in a string, case-insensitive */
-const char *string_find_case(const char *haystack, const char *needle);
+const char *string_find_case(const cchar_t *haystack, const cchar_t *needle);
 /* Finds open entry with highest priority */
 bool entries_highest_open(size_t *index, const struct EntryBuffer *entries);
 /* Sorts entries by priority, critical first */
@@ -135,7 +135,7 @@ DECLARE_BUFFER_FINALIZE(struct Entry, EntryBuffer, entries_)
 /* Sets string to line read from file, returns whether read something */
 bool string_get_line(struct CharBuffer *string, void *file);
 /* Sets string to user input */
-void string_get_input(struct CharBuffer *string, const char *prompt, const char *prefill, const char *prefill_prompt);
+void string_get_input(struct CharBuffer *string, const cchar_t *prompt, const cchar_t *prefill, const cchar_t *prefill_prompt);
 /* Transforms description to commit message */
 void string_description_to_done_commit(struct CharBuffer *string);
 /* Transforms description to commit message */
@@ -143,6 +143,6 @@ void string_description_to_undo_commit(struct CharBuffer *string);
 /* Transforms description to commit message */
 void string_description_to_remove_commit(struct CharBuffer *string);
 /* Resolves string */
-bool string_resolve(size_t *index, const char *option, const char *const *options, size_t options_size);
+bool string_resolve(size_t *index, const cchar_t *option, const cchar_t *const *options, size_t options_size);
 
 #endif

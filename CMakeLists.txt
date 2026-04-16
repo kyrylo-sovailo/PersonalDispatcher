@@ -39,11 +39,15 @@ elseif("${COMPILER_STYLE}" STREQUAL "MSVC")
     add_compile_options(/wd4127) #C4127: Conditional expression is constant
     add_compile_options(/wd4464) #C4464: Relative include path contains '..'
     
-    # There are a lot more warnings (mostly security), but they are impossible to fix (MSVC analyzer is dumber than GCC) and Windows is not primary platform
-    # Therefore I decided that I don't care
+    # Warnings that appear because MSVC isn't as smart as GCC
+    # It may hide valid warnings, but I decide to hide them because otherwise I risk missing more important warnings
+    #add_compile_options(/wd4244) #C4244: conversion from '<unnamed-enum>' to '<type>', possible loss of data
+    #add_compile_options(/wd4701) #C4701: Potentially uninitialized local variable used
+    #add_compile_options(/wd4774) #C4774: Format string expected in argument is not a string literal
+    #add_compile_options(/wd4996) #C4996: This function or variable may be unsafe
 endif()
 if(WIN32)
-    add_compile_definitions(WIN32)
+    add_compile_definitions(WIN32 UNICODE)
 endif()
 
 # Dependencies
