@@ -36,7 +36,7 @@ static bool kpd_read_line(struct Entry *entry, struct CharBuffer *line)
     || line->p[3] != '['
     || (line->p[4] != ' ' && line->p[4] != 'X')
     || line->p[5] != ']'
-    || line->p[6] != ' ') RET1(ERR_FORMAT, "invalid line '" COMMON_S COMMON_L("'"), line->p);
+    || line->p[6] != ' ') error_print_die(ERR_FORMAT, "invalid line '" COMMON_S COMMON_L("'"), line->p);
     entry->done = line->p[4] == 'X';
     
     /* Parse priority */
@@ -135,7 +135,7 @@ static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, cchar_t
             /* Number read */
             *current_string = next_string;
             if (begin_read && begin > end) return false;
-            if (mask != NULL && (end == 0 || end > mask_size)) RET1(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
+            if (mask != NULL && (end == 0 || end > mask_size)) error_print_die(ERR_USAGE, "'%u' is out of range", (unsigned int)end);
         }
         if (mask != NULL) COMMON_W(memset(mask+(begin-1), '\1', end-(begin-1)));
         return kpd_parse_number_post_number(current_string);
