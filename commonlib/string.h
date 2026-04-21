@@ -34,6 +34,9 @@ void string_zero(struct CharBuffer *string);
 
 /* Resizes string (size does not include null terminator) */
 ERROR_TYPE string_resize(struct CharBuffer *string, size_t size) NODISCARD;
+#ifdef COMMON_WCHAR
+ERROR_TYPE string_nresize(struct NCharBuffer* string, size_t size) NODISCARD;
+#endif
 
 /* Ensures that the string has enough capacity (capacity does not include null terminator) */
 ERROR_TYPE string_reserve(struct CharBuffer *string, size_t capacity) NODISCARD;

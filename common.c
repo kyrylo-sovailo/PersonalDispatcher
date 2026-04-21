@@ -169,7 +169,7 @@ static void kpd_invoke(cchar_t *const *arguments)
         output_print(false, COMMON_S COMMON_S COMMON_S COMMON_C, quotation, *argument_i, quotation, next ? COMMON_L(' ') : COMMON_L('\n'));
         #ifdef WIN32
             /* TODO: very likely to fail given some invalid symbols */
-            string_vprint_append(&command_line, COMMON_S COMMON_S COMMON_S COMMON_S, quotation, *argument_i, quotation, next ? COMMON_L(" ") : COMMON_E);
+            string_print_append(&command_line, COMMON_S COMMON_S COMMON_S COMMON_S, quotation, *argument_i, quotation, next ? COMMON_L(" ") : COMMON_E);
         #endif
     }
     output_close(false);
@@ -275,7 +275,7 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
     /* Parse TODO.md */
     entry_number = 0;
     #ifdef COMMON_WCHAR
-    while (nstring_get_line(&nline, file))
+    while (string_get_nline(&nline, file))
     #else
     while (string_get_line(&line, file))
     #endif
@@ -284,9 +284,9 @@ void kpd_read_target(struct EntryBuffer *entries, struct CharBuffer *path, bool 
         struct Entry entry = ZERO_INIT;
         #ifdef COMMON_WCHAR
             size_t size;
-            nstring_to_wstring(nline.p, nline.size + 1, NULL, &size);
+            string_to_wstring(nline.p, nline.size + 1, NULL, &size);
             string_resize(&line, size - 1);
-            nstring_to_wstring(nline.p, nline.size + 1, line.p, &size);
+            string_to_wstring(nline.p, nline.size + 1, line.p, &size);
         #endif
         entry.number = entry_number;
         if (!kpd_read_line(&entry, &line)) continue;
@@ -344,10 +344,10 @@ void kpd_write_target(const struct EntryBuffer *entries, const struct CharBuffer
             const size_t wide_description_size = wcslen(entry_i->description) + 1;
             size_t description_size;
             char *description;
-            wstring_to_nstring(entry_i->description, wide_description_size, NULL, &description_size);
+            string_to_nstring(entry_i->description, wide_description_size, NULL, &description_size);
             description = malloc(description_size);
             ARET(ERR_MALLOC, description != NULL);
-            wstring_to_nstring(entry_i->description, wide_description_size, description, &description_size);
+            string_to_nstring(entry_i->description, wide_description_size, description, &description_size);
         #else
             const nchar_t *description = entry_i->description;
         #endif

@@ -82,9 +82,9 @@ bool string_get_line(struct CharBuffer *string, void *file)
 }
 
 #ifdef COMMON_WCHAR
-bool nstring_get_line(struct NCharBuffer *string, void *file)
+bool string_get_nline(struct NCharBuffer *string, void *file)
 {
-    if (string->capacity < INITIAL_BUFFER_SIZE + 1) nstring_resize(string, INITIAL_BUFFER_SIZE);
+    if (string->capacity < INITIAL_BUFFER_SIZE + 1) string_nresize(string, INITIAL_BUFFER_SIZE);
     string->size = 0;
     while (true)
     {
@@ -103,7 +103,7 @@ bool nstring_get_line(struct NCharBuffer *string, void *file)
                 /* Endline not read, try again */
                 const size_t size = string->capacity - 1; /* Meaningful read symbols */
                 string->size = size;
-                nstring_resize(string, 2 * size);
+                string_nresize(string, 2 * size);
                 string->size = size;
             }
             else

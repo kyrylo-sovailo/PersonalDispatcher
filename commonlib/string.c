@@ -93,6 +93,25 @@ ERROR_TYPE string_resize(struct CharBuffer *string, size_t size)
     ERROR_RETURN_OK();
 }
 
+#ifdef COMMON_WCHAR
+ERROR_TYPE string_nresize(struct NCharBuffer *string, size_t size)
+{
+    if (size + 1 > string->capacity)
+    {
+        nchar_t *new_p;
+        size_t new_capacity = (string->capacity == 0) ? 1 : string->capacity;
+        while (size + 1 > new_capacity) new_capacity *= 2;
+        new_p = (nchar_t*)realloc(string->p, new_capacity * sizeof(*string->p));
+        ARET(ERR_MALLOC, new_p != NULL);
+        string->capacity = new_capacity;
+        string->p = new_p;
+    }
+    string->size = size;
+    string->p[size] = COMMON_L('\0');
+    ERROR_RETURN_OK();
+}
+#endif
+
 ERROR_TYPE string_reserve(struct CharBuffer *string, size_t capacity)
 {
     if (capacity + 1 > string->capacity)

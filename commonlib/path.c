@@ -122,9 +122,9 @@ static ERROR_TYPE path_append_mem_noroot(struct CharBuffer *path, const cchar_t 
             const cchar_t *nonvalid_found;
             for (nonvalid_found = p; nonvalid_found < p + part_size; nonvalid_found++)
             {
-                ARET(ERR_CODEC, (unsigned int)*nonvalid_found >= (unsigned int)' ');
+                ARET(ERR_PATH, (unsigned int)*nonvalid_found >= (unsigned int)' ');
                 #ifdef WIN32
-                    ARET(COMMON_W(memchr(COMMON_L("<>:\"|?*"), *nonvalid_found, 7)) == NULL);
+                    ARET(ERR_PATH, COMMON_W(memchr(COMMON_L("<>:\"|?*"), *nonvalid_found, 7)) == NULL);
                 #endif
             }
             if (path->size > 0 && path->p[path->size - 1] != COMMON_SEPARATOR) PRET(string_push(path, COMMON_SEPARATOR)); /* Protection against root */

@@ -135,7 +135,7 @@ DECLARE_BUFFER_FINALIZE(struct Entry, EntryBuffer, entries_)
 /* Sets string to line read from file, returns whether read something */
 bool string_get_line(struct CharBuffer *string, void *file);
 #ifdef COMMON_WCHAR
-bool nstring_get_line(struct NCharBuffer *string, void *file);
+bool string_get_nline(struct NCharBuffer *string, void *file);
 #endif
 /* Sets string to user input */
 void string_get_input(struct CharBuffer *string, const cchar_t *prompt, const cchar_t *prefill, const cchar_t *prefill_prompt);

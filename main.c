@@ -836,7 +836,7 @@ int main(void)
     cchar_t **argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv != NULL)
     {
-        code = _main(argc, argv);
+        code = common_main(argc, argv);
         LocalFree(argv);
     }
     return code;
