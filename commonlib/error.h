@@ -35,7 +35,6 @@
 #define ERROR_DECLARE()
 #define ERROR_ASSIGN(EXPRESSION) EXPRESSION
 #define ERROR_RETURN() return
-#define ERROR_RETURN_VERBATIM() return
 #define ERROR_RETURN_OK() return
 
 /* Assigns 'error' variable and goes to 'failure' label (GOTO = goto) */

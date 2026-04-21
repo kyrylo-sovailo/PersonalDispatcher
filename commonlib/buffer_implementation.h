@@ -33,7 +33,7 @@ ERROR_TYPE FUNCTION_NAME ## resize(struct STRUCT_NAME *buffer, size_t size) \
     default: ERROR_ASSIGN(generic_buffer_resize_n(buffer, size, sizeof(*buffer->p))); break; \
     } \
     for (p = buffer->p + old_size; p < buffer->p + size; p++) FUNCTION_NAME ## initialize_element(p); \
-    ERROR_RETURN_VERBATIM(); \
+    ERROR_RETURN(); \
 }
 
 #define IMPLEMENT_BUFFER_RESERVE(TYPE, STRUCT_NAME, FUNCTION_NAME) \
@@ -48,7 +48,7 @@ ERROR_TYPE FUNCTION_NAME ## reserve(struct STRUCT_NAME *buffer, size_t size) \
     case 8: ERROR_ASSIGN(generic_buffer_reserve_8(buffer, size)); break; \
     default: ERROR_ASSIGN(generic_buffer_reserve_n(buffer, size, sizeof(*buffer->p))); break; \
     } \
-    ERROR_RETURN_VERBATIM(); \
+    ERROR_RETURN(); \
 }
 
 #define IMPLEMENT_BUFFER_APPEND(TYPE, STRUCT_NAME, FUNCTION_NAME) \
@@ -63,7 +63,7 @@ ERROR_TYPE FUNCTION_NAME ## append(struct STRUCT_NAME *buffer, const TYPE *data,
     case 8: ERROR_ASSIGN(generic_buffer_append_8(buffer, data, size)); break; \
     default: ERROR_ASSIGN(generic_buffer_append_n(buffer, data, size, sizeof(*buffer->p))); break; \
     } \
-    ERROR_RETURN_VERBATIM(); \
+    ERROR_RETURN(); \
 }
 
 #define IMPLEMENT_BUFFER_PUSH(TYPE, STRUCT_NAME, FUNCTION_NAME, SIZE) \
@@ -73,7 +73,7 @@ ERROR_TYPE FUNCTION_NAME ## push(struct STRUCT_NAME *buffer, TYPE data) \
     ERROR_DECLARE(); \
     (void)static_check; \
     ERROR_ASSIGN(generic_buffer_push_ ## SIZE(buffer, (GENERIC_ARGMENT_ ## SIZE)data)); \
-    ERROR_RETURN_VERBATIM(); \
+    ERROR_RETURN(); \
 }
 
 void generic_buffer_initialize(void *buffer);

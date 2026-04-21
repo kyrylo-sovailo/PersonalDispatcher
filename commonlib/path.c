@@ -34,33 +34,65 @@ static const cchar_t *path_next_separator(const cchar_t *p, size_t size)
     #endif
 }
 
+#ifdef WIN32
+
 static size_t path_root_size(const cchar_t *p, size_t size)
 {
-    #ifdef WIN32
-        /* Path like C:\ */
-        if (size >= 3
-        && ((p[0] >= COMMON_L('a') && p[0] <= COMMON_L('z')) || (p[0] >= COMMON_L('A') && p[0] <= COMMON_L('Z')))
-        && p[1] == COMMON_L(':')
-        && (p[2] == COMMON_L('/') || p[2] == COMMON_L('\\')))
-        {
-            return 3;
-        }
+    /* Path like C:\ */
+    if (size >= 3
+    && ((p[0] >= COMMON_L('a') && p[0] <= COMMON_L('z')) || (p[0] >= COMMON_L('A') && p[0] <= COMMON_L('Z')))
+    && (p[1] == COMMON_L(':'))
+    && (p[2] == COMMON_L('/') || p[2] == COMMON_L('\\')))
+    {
+        return 3;
+    }
 
-        /* Path like \\.\ */
-        else if (size >= 2
-        && (p[0] == COMMON_L('/') || p[0] == COMMON_L('\\'))
-        && (p[1] == COMMON_L('/') || p[1] == COMMON_L('\\')))
-        {
-            const cchar_t *last_separator = path_next_separator(p + 2, size - 2);
-            if (last_separator == NULL) return 2; /* Shouldn't happen actually */
-            else return (size_t)(last_separator - p) + 1;
-        }
-    #else
-        if (size >= 1 && p[0] == COMMON_L('/')) return 1;
-    #endif
+    /* Path like \\?\C:\ */
+    else if (size >= 7
+    && (p[0] == COMMON_L('/') || p[0] == COMMON_L('\\'))
+    && (p[1] == COMMON_L('/') || p[1] == COMMON_L('\\'))
+    && (p[2] == '?')
+    && (p[3] == COMMON_L('/') || p[3] == COMMON_L('\\'))
+    && ((p[4] >= COMMON_L('a') && p[4] <= COMMON_L('z')) || (p[4] >= COMMON_L('A') && p[4] <= COMMON_L('Z')))
+    && (p[5] == COMMON_L(':'))
+    && (p[6] == COMMON_L('/') || p[6] == COMMON_L('\\')))
+    {
+        return 7;
+    }
+
+    /*
+    The list of Windows path types:
+    1. Relative path on current disk:       folder\file.txt (implemented)
+    2. Relative path on other disk:         C:folder\file.txt
+    3. Absolute path on current disk:       \folder\file.txt
+    4. Absolute path on other disk:         C:\folder\file.txt (implemented)
+    5. Long absolute path on other disk:    \\?\C:\folder\file.txt (implemented)
+    6. Pipe name:                           \\PipeName\
+    7. Long pipe name:                      \\?\UNC\PipeName\
+    8. Internal device name:                \\.\DeviceName
+    9. Internal file name:                  \??\C:\folder\file.txt
+    */
     return 0;
 }
 
+static ERROR_TYPE path_prepand_remove_long_root(struct CharBuffer *path, size_t root_size) NODISCARD;
+static ERROR_TYPE path_prepand_remove_long_root(struct CharBuffer *path, size_t root_size)
+{
+    if (root_size == 0) { /* Do nothing */ }
+    else if (root_size == 3 && path->size + 1 > MAX_PATH) { PRET(string_insert_mem(path, 0, COMMON_L("\\\\?\\"), 4)); }
+    else if (root_size == 7 && path->size + 1 <= MAX_PATH + 4) { PRET(string_remove(path, 0, 4)); }
+    ERROR_RETURN_OK();
+}
+
+#else
+
+static size_t path_root_size(const cchar_t *p, size_t size)
+{
+    if (size >= 1 && p[0] == COMMON_L('/')) return 1;
+    return 0;
+}
+
+#endif
 
 static ERROR_TYPE path_append_mem_noroot(struct CharBuffer *path, const cchar_t *other, size_t other_size) NODISCARD;
 static ERROR_TYPE path_append_mem_noroot(struct CharBuffer *path, const cchar_t *other, size_t other_size)
@@ -87,6 +119,14 @@ static ERROR_TYPE path_append_mem_noroot(struct CharBuffer *path, const cchar_t 
         else
         {
             /* Regular case */
+            const cchar_t *nonvalid_found;
+            for (nonvalid_found = p; nonvalid_found < p + part_size; nonvalid_found++)
+            {
+                ARET(ERR_CODEC, (unsigned int)*nonvalid_found >= (unsigned int)' ');
+                #ifdef WIN32
+                    ARET(COMMON_W(memchr(COMMON_L("<>:\"|?*"), *nonvalid_found, 7)) == NULL);
+                #endif
+            }
             if (path->size > 0 && path->p[path->size - 1] != COMMON_SEPARATOR) PRET(string_push(path, COMMON_SEPARATOR)); /* Protection against root */
             PRET(string_append_mem(path, p, part_size));
         }
@@ -133,10 +173,12 @@ ERROR_TYPE path_copy_mem(struct CharBuffer *path, const cchar_t *other, size_t o
         size_t i;
         PRET(string_resize(path, root_size));
         for (i = 0; i < root_size; i++) path->p[i] = (other[i] == COMMON_L('/')) ? COMMON_L('\\') : other[i];
+        PRET(path_append_mem_noroot(path, other + root_size, other_size - root_size));
+        PRET(path_prepand_remove_long_root(path, root_size));
     #else
         PRET(string_copy_mem(path, other, root_size));
+        PRET(path_append_mem_noroot(path, other + root_size, other_size - root_size));
     #endif
-    PRET(path_append_mem_noroot(path, other + root_size, other_size - root_size));
     ERROR_RETURN_OK();
 }
 
@@ -166,6 +208,9 @@ ERROR_TYPE path_append(struct CharBuffer *path, const struct CharBuffer *other)
         p = found + 1;
         size = size - part_size - 1;
     }
+    #ifdef WIN32
+        PRET(path_prepand_remove_long_root(path, path_root_size(path->p, path->size)));
+    #endif
     ERROR_RETURN_OK();
 }
 
@@ -179,6 +224,9 @@ ERROR_TYPE path_append_mem(struct CharBuffer *path, const cchar_t *other, size_t
 {
     ARET(ERR_PATH, !path_absolute_mem(other, other_size));
     PRET(path_append_mem_noroot(path, other, other_size));
+    #ifdef WIN32
+        PRET(path_prepand_remove_long_root(path, path_root_size(path->p, path->size)));
+    #endif
     ERROR_RETURN_OK();
 }
 
@@ -250,7 +298,7 @@ ERROR_TYPE path_get_executable_path(struct CharBuffer *path, int argc, cchar_t *
         while (true)
         {
             DWORD size = GetModuleFileName(NULL, path->p, (DWORD)path->size);
-            ARET(ERR_PATH, size > 0);
+            ARET(ERR_USAGE, size > 0);
             if (size == path->size)
             {
                 PRET(char_buffer_resize(path, 2 * path->size));
@@ -261,13 +309,13 @@ ERROR_TYPE path_get_executable_path(struct CharBuffer *path, int argc, cchar_t *
                 break;
             }
         }
-        ERROR_RETURN_OK();
+        PRET(path_prepand_remove_long_root(path, path_root_size(path->p, path->size)));
     #else
-        ARET(ERR_OTHER, argc > 0);
-        ARET(ERR_OTHER, argv[0] != NULL);
+        ARET(ERR_USAGE, argc > 0);
+        ARET(ERR_USAGE, argv[0] != NULL);
         PRET(path_copy_str(path, argv[0]));
-        ERROR_RETURN_OK();
     #endif
+    ERROR_RETURN_OK();
 }
 
 ERROR_TYPE path_get_working_directory(struct CharBuffer *path)
@@ -276,7 +324,7 @@ ERROR_TYPE path_get_working_directory(struct CharBuffer *path)
         size_t size = GetCurrentDirectoryW(0, NULL);
         PRET(string_resize(path, size - 1));
         (void)GetCurrentDirectory((DWORD)size, path->p);
-        ERROR_RETURN_OK();
+        PRET(path_prepand_remove_long_root(path, path_root_size(path->p, path->size)));
     #else
         PRET(string_resize(path, 256));
         while (true)
@@ -292,8 +340,8 @@ ERROR_TYPE path_get_working_directory(struct CharBuffer *path)
             }
         }
         if (path->p[path->size - 1] == COMMON_L('/')) { path->size--; path->p[path->size] = COMMON_L('\0'); }
-        ERROR_RETURN_OK();
     #endif
+    ERROR_RETURN_OK();
 }
 
 bool path_get_directory(struct CharBuffer *directory, const struct CharBuffer *path, bool append_dotdot_if_dotdot)
@@ -330,6 +378,9 @@ bool path_get_directory(struct CharBuffer *directory, const struct CharBuffer *p
             if (directory == path) { directory->size = size; directory->p[size] = COMMON_L('\0'); }
             else { PRET(string_copy_mem(directory, path->p, size)); }
         }
+        #ifdef WIN32
+        PRET(path_prepand_remove_long_root(directory, root_size));
+        #endif
         return true;
     }
 
@@ -351,6 +402,7 @@ bool path_get_directory(struct CharBuffer *directory, const struct CharBuffer *p
         /* True basename */
         string_zero(directory);
     }
+    /* no path_prepand_remove_long_root() because path is relative */
     return true;
 }
 

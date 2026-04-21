@@ -2,7 +2,9 @@
 #define COMMONLIB_MACRO_H
 
 /* Default error handling */
-#define ERROR_DIE
+#if !defined(ERROR_DIE) && !defined(ERROR_PRINT) && !defined(ERROR_TRACE)
+    #define ERROR_DIE
+#endif
 
 /* Function attributes */
 #ifdef __GNUC__
