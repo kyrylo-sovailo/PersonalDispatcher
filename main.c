@@ -779,7 +779,7 @@ static int kpd_version(int argc, cchar_t **argv)
     return ERR_OK;
 }
 
-static int _main(int argc, cchar_t **argv)
+static int common_main(int argc, cchar_t **argv)
 {
     const cchar_t *option_string;
     int code;
@@ -844,6 +844,6 @@ int main(void)
 #else
 int main(int argc, char **argv)
 {
-    return _main(argc, argv);
+    return common_main(argc, argv);
 }
 #endif

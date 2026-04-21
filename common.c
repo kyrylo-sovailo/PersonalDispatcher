@@ -149,7 +149,12 @@ static bool kpd_parse_number_post_hyphen(const cchar_t **current_string, char *m
 static void kpd_invoke(cchar_t *const *arguments)
 {
     cchar_t *const *argument_i;
-    #ifndef WIN32
+    #ifdef WIN32
+        struct CharBuffer command_line = ZERO_INIT;
+        STARTUPINFO startup_info = ZERO_INIT;
+        PROCESS_INFORMATION process_info = ZERO_INIT;
+        DWORD code;
+    #else
         int id;
     #endif
 
@@ -162,11 +167,24 @@ static void kpd_invoke(cchar_t *const *arguments)
         else if (COMMON_WCS(chr(*argument_i, '\'')) == NULL) quotation = COMMON_L("\'");
         else quotation = COMMON_L("\"");
         output_print(false, COMMON_S COMMON_S COMMON_S COMMON_C, quotation, *argument_i, quotation, next ? COMMON_L(' ') : COMMON_L('\n'));
+        #ifdef WIN32
+            /* TODO: very likely to fail given some invalid symbols */
+            string_vprint_append(&command_line, COMMON_S COMMON_S COMMON_S COMMON_S, quotation, *argument_i, quotation, next ? COMMON_L(" ") : COMMON_E);
+        #endif
     }
     output_close(false);
 
     #ifdef WIN32
-        /* TODO */
+        startup_info.cb = sizeof(startup_info);
+        if (!CreateProcess(NULL, command_line.p, NULL, NULL, false, 0, NULL, NULL, &startup_info, &process_info))
+            error_print_die(ERR_FORK, COMMON_L("CreateProcess() failed"));
+        if (WaitForSingleObject(process_info.hProcess, INFINITE) == WAIT_FAILED)
+            error_print_die(ERR_WAIT, COMMON_L("WaitForSingleObject() failed"));
+        if (!GetExitCodeProcess(process_info.hProcess, &code))
+            error_print_die(ERR_GIT, COMMON_QS COMMON_L(" failed"), arguments[0]);
+        CloseHandle(process_info.hProcess);
+        CloseHandle(process_info.hThread);
+        string_finalize(&command_line);
     #else
         id = fork();
         if (id < 0) error_print_die(ERR_FORK, COMMON_L("vfork() failed"));
